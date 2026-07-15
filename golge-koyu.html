@@ -2,10 +2,11 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Gölge Köyü</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -24,6 +25,10 @@
     --amber:#d99a3d;
     --blood:#8b3145;
     --teal:#3f7a72;
+    --rust:#c1662f;
+    --blue:#4a7fb5;
+    --purple:#9b7fc9;
+    --pink:#c9679f;
     --font-display:'Cinzel',serif;
     --font-body:'Inter',sans-serif;
   }
@@ -35,7 +40,6 @@
   .hud{position:fixed;pointer-events:none;z-index:10;}
   .hud *{pointer-events:auto;}
 
-  /* Top center dial */
   #dial{
     top:16px;left:50%;transform:translateX(-50%);
     display:flex;flex-direction:column;align-items:center;gap:6px;
@@ -54,7 +58,12 @@
   }
   #dial .round-label{font-size:11px;color:var(--muted);}
 
-  /* Role card top-left */
+  #mute-btn{
+    top:16px;right:16px;position:fixed;width:40px;height:40px;border-radius:50%;
+    background:var(--panel);border:1px solid var(--panel-border);color:var(--ink);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;z-index:15;
+  }
+
   #role-card{
     top:16px;left:16px;width:210px;
     background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
@@ -67,43 +76,47 @@
   #role-card.doctor .r-name{color:var(--teal);}
   #role-card.sheriff .r-name{color:var(--amber);}
   #role-card.villager .r-name{color:var(--ink);}
+  #role-card.vigilante .r-name{color:var(--rust);}
+  #role-card.bodyguard .r-name{color:var(--blue);}
+  #role-card.escort .r-name{color:var(--purple);}
+  #role-card.jester .r-name{color:var(--pink);}
 
-  /* Player list right */
   #player-list{
-    top:16px;right:16px;width:220px;
+    top:70px;right:16px;width:220px;
     background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
-    padding:12px;max-height:70vh;overflow-y:auto;
+    padding:12px;max-height:64vh;overflow-y:auto;
   }
   #player-list h3{font-family:var(--font-display);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:0 0 10px 0;}
   .player-row{
     display:flex;align-items:center;gap:8px;padding:6px 6px;border-radius:6px;font-size:13px;margin-bottom:2px;
+    transition:background 0.3s ease;
   }
   .player-row.dead{opacity:0.35;text-decoration:line-through;}
+  .player-row.speaking{background:rgba(217,154,61,0.15);}
   .player-row .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
   .player-row .pname{flex:1;}
   .player-row .vote-btn{
     font-size:11px;background:var(--blood);color:#fff;border:none;border-radius:5px;
-    padding:3px 8px;cursor:pointer;font-family:var(--font-body);font-weight:600;
+    padding:4px 9px;cursor:pointer;font-family:var(--font-body);font-weight:600;
   }
   .player-row .vote-btn:hover{background:#a8425c;}
   .player-row .vote-count{font-size:11px;color:var(--amber);min-width:14px;text-align:right;}
   .player-row.you{border:1px solid var(--panel-border);}
 
-  /* Chat log bottom left */
   #chat-panel{
     bottom:16px;left:16px;width:340px;height:220px;
     background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
     display:flex;flex-direction:column;overflow:hidden;
   }
   #chat-log{flex:1;overflow-y:auto;padding:10px;font-size:12.5px;line-height:1.5;}
-  #chat-log .line{margin-bottom:6px;}
+  #chat-log .line{margin-bottom:6px;animation:fadein 0.3s ease;}
+  @keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
   #chat-log .who{font-weight:700;}
   #chat-log .sys{color:var(--amber);font-style:italic;}
   #chat-form{display:flex;border-top:1px solid var(--panel-border);}
   #chat-input{flex:1;background:transparent;border:none;color:var(--ink);padding:8px 10px;font-size:12.5px;font-family:var(--font-body);outline:none;}
   #chat-form button{background:none;border:none;color:var(--amber);padding:0 12px;cursor:pointer;font-size:16px;}
 
-  /* Center banner */
   #banner{
     top:110px;left:50%;transform:translateX(-50%);
     background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
@@ -112,7 +125,6 @@
   }
   #banner.show{opacity:1;}
 
-  /* Action panel bottom center */
   #action-panel{
     bottom:16px;left:50%;transform:translateX(-50%);
     background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
@@ -122,51 +134,86 @@
   #action-targets{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:10px;}
   #action-targets button{
     background:rgba(255,255,255,0.06);border:1px solid var(--panel-border);color:var(--ink);
-    padding:6px 12px;border-radius:6px;cursor:pointer;font-family:var(--font-body);font-size:12.5px;
+    padding:7px 13px;border-radius:6px;cursor:pointer;font-family:var(--font-body);font-size:12.5px;
   }
   #action-targets button.selected{background:var(--amber);color:#1a1204;border-color:var(--amber);font-weight:700;}
   #action-targets button:disabled{opacity:0.3;cursor:not-allowed;}
   #confirm-btn{
-    background:var(--blood);color:#fff;border:none;padding:8px 22px;border-radius:6px;
+    background:var(--blood);color:#fff;border:none;padding:9px 22px;border-radius:6px;
     cursor:pointer;font-family:var(--font-body);font-weight:700;font-size:13px;letter-spacing:0.5px;
   }
   #confirm-btn:disabled{opacity:0.4;cursor:not-allowed;}
   #action-panel.hidden{display:none;}
 
-  /* Timer bar */
   #timer-bar-wrap{position:fixed;top:0;left:0;width:100%;height:3px;background:rgba(255,255,255,0.05);z-index:11;}
   #timer-bar{height:100%;background:var(--amber);width:0%;transition:width 1s linear;}
 
-  /* Intro / end overlay */
   #overlay{
     position:fixed;inset:0;background:rgba(3,4,7,0.92);z-index:30;
     display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:20px;
+    overflow-y:auto;
   }
   #overlay h1{font-family:var(--font-display);font-size:46px;letter-spacing:4px;margin:0 0 6px 0;color:var(--ink);text-shadow:0 0 30px rgba(217,154,61,0.35);}
   #overlay .sub{color:var(--muted);font-size:14px;margin-bottom:26px;letter-spacing:1px;}
   #overlay p.desc{max-width:480px;color:var(--muted);font-size:13.5px;line-height:1.7;margin-bottom:26px;}
-  #overlay button{
+  #overlay button.primary{
     background:var(--blood);color:#fff;border:none;padding:14px 36px;border-radius:8px;
     font-family:var(--font-display);font-size:15px;letter-spacing:2px;cursor:pointer;text-transform:uppercase;
+    margin:6px;
   }
-  #overlay button:hover{background:#a8425c;}
+  #overlay button.primary:hover{background:#a8425c;}
+  #overlay button.secondary{
+    background:transparent;color:var(--ink);border:1px solid var(--panel-border);padding:14px 36px;border-radius:8px;
+    font-family:var(--font-display);font-size:15px;letter-spacing:2px;cursor:pointer;text-transform:uppercase;margin:6px;
+  }
+  #overlay button.secondary:hover{border-color:var(--amber);color:var(--amber);}
   #overlay.hidden{display:none;}
-  #overlay .roles-legend{display:flex;gap:18px;margin-bottom:28px;flex-wrap:wrap;justify-content:center;max-width:560px;}
-  #overlay .roles-legend div{font-size:12px;color:var(--muted);}
+  #overlay .roles-legend{display:flex;gap:16px;margin-bottom:28px;flex-wrap:wrap;justify-content:center;max-width:640px;}
+  #overlay .roles-legend div{font-size:11.5px;color:var(--muted);width:130px;}
   #overlay .roles-legend b{display:block;font-family:var(--font-display);font-size:13px;margin-bottom:2px;}
   .legend-mafia b{color:var(--blood);}
   .legend-doctor b{color:var(--teal);}
   .legend-sheriff b{color:var(--amber);}
   .legend-villager b{color:var(--ink);}
+  .legend-vigilante b{color:var(--rust);}
+  .legend-bodyguard b{color:var(--blue);}
+  .legend-escort b{color:var(--purple);}
+  .legend-jester b{color:var(--pink);}
+
+  #overlay input[type=text]{
+    background:rgba(255,255,255,0.06);border:1px solid var(--panel-border);color:var(--ink);
+    padding:12px 14px;border-radius:8px;font-family:var(--font-body);font-size:14px;margin:6px;width:260px;
+    text-align:center;
+  }
+  #overlay input[type=text]:focus{outline:1px solid var(--amber);}
+  #lobby-players{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:500px;margin:14px 0;}
+  #lobby-players span{background:rgba(255,255,255,0.06);border:1px solid var(--panel-border);padding:6px 12px;border-radius:16px;font-size:13px;}
+  .room-code{font-family:var(--font-display);font-size:28px;letter-spacing:8px;color:var(--amber);margin:10px 0;}
+  .small-note{font-size:11.5px;color:var(--muted);max-width:400px;margin-top:6px;}
 
   ::-webkit-scrollbar{width:6px;}
   ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:3px;}
+
+  @media (max-width:680px){
+    #role-card{width:150px;padding:10px;top:8px;left:8px;}
+    #role-card .r-name{font-size:16px;}
+    #role-card .r-desc{font-size:10.5px;}
+    #player-list{width:150px;top:60px;right:8px;max-height:40vh;padding:8px;}
+    #player-list .player-row{font-size:11px;}
+    #chat-panel{width:calc(100vw - 16px);height:150px;left:8px;bottom:8px;}
+    #action-panel{width:calc(100vw - 24px);min-width:0;bottom:170px;padding:10px 12px;}
+    #dial .ring{width:56px;height:56px;font-size:20px;}
+    #overlay h1{font-size:30px;}
+    #overlay .roles-legend div{width:100px;font-size:10.5px;}
+    #mute-btn{width:34px;height:34px;top:8px;right:8px;}
+  }
 </style>
 </head>
 <body>
 
 <div id="canvas-wrap"></div>
 <div id="timer-bar-wrap"><div id="timer-bar"></div></div>
+<div id="mute-btn">🔊</div>
 
 <div class="hud" id="dial">
   <div class="ring" id="dial-icon">🌙</div>
@@ -202,65 +249,166 @@
 </div>
 
 <div id="overlay">
-  <h1>GÖLGE KÖYÜ</h1>
-  <div class="sub">bir sosyal çıkarım oyunu</div>
-  <p class="desc">Köyün arasına gizlenmiş katiller var. Gündüzleri tartışıp oy verin, geceleri gerçek rolünüzü kullanın. Köy mü katilleri temizleyecek, yoksa karanlık mı köyü ele geçirecek?</p>
-  <div class="roles-legend">
-    <div class="legend-mafia"><b>Katil</b>Geceleri bir kurban seçer</div>
-    <div class="legend-doctor"><b>Doktor</b>Geceleri birini korur</div>
-    <div class="legend-sheriff"><b>Dedektif</b>Geceleri birini araştırır</div>
-    <div class="legend-villager"><b>Vatandaş</b>Sadece oyuyla köyü korur</div>
+  <div id="screen-menu">
+    <h1>GÖLGE KÖYÜ</h1>
+    <div class="sub">bir sosyal çıkarım oyunu</div>
+    <p class="desc">Köyün arasına gizlenmiş katiller var. Gündüzleri tartışıp oy verin, geceleri gerçek rolünüzü kullanın. Köy mü katilleri temizleyecek, yoksa karanlık mı köyü ele geçirecek?</p>
+    <div class="roles-legend">
+      <div class="legend-mafia"><b>Katil</b>Geceleri kurban seçer</div>
+      <div class="legend-doctor"><b>Doktor</b>Geceleri birini korur</div>
+      <div class="legend-sheriff"><b>Dedektif</b>Geceleri araştırır</div>
+      <div class="legend-vigilante"><b>İnfazcı</b>Sınırlı sayıda ateş eder</div>
+      <div class="legend-bodyguard"><b>Muhafız</b>Korurken kendini feda eder</div>
+      <div class="legend-escort"><b>Oyalayıcı</b>Birinin gece hamlesini engeller</div>
+      <div class="legend-jester"><b>Soytarı</b>Amacı astırılmak!</div>
+      <div class="legend-villager"><b>Vatandaş</b>Sadece oyuyla köyü korur</div>
+    </div>
+    <div>
+      <button class="primary" id="btn-local">Botlara Karşı Oyna</button>
+      <button class="secondary" id="btn-online">Arkadaşlarınla Oyna (Online)</button>
+    </div>
   </div>
-  <button id="start-btn">Oyuna Başla</button>
+
+  <div id="screen-online" style="display:none;">
+    <h1 style="font-size:32px;">ONLİNE OYUN</h1>
+    <p class="desc">Bir sunucu adresi girin (kendi Node.js sunucunuzun URL'i), adınızı yazın, sonra oda kurun ya da bir oda koduna katılın.</p>
+    <input type="text" id="server-url" placeholder="https://sizin-sunucunuz.onrender.com">
+    <br>
+    <input type="text" id="player-name" placeholder="Adın" maxlength="16">
+    <br>
+    <button class="primary" id="btn-create-room">Oda Kur</button>
+    <input type="text" id="room-code-input" placeholder="ODA KODU" maxlength="5" style="text-transform:uppercase;width:140px;">
+    <button class="secondary" id="btn-join-room">Katıl</button>
+    <div id="online-status" class="small-note"></div>
+    <br>
+    <button class="secondary" id="btn-back-menu">← Geri</button>
+  </div>
+
+  <div id="screen-lobby" style="display:none;">
+    <h1 style="font-size:32px;">LOBİ</h1>
+    <div class="sub">Oda kodu, arkadaşların bununla katılsın:</div>
+    <div class="room-code" id="room-code-display">-----</div>
+    <div id="lobby-players"></div>
+    <div class="small-note">Oyun 5-9 oyuncu ile başlatılabilir. Sadece oda kurucusu başlatabilir.</div>
+    <button class="primary" id="btn-start-online" style="margin-top:16px;">Oyunu Başlat</button>
+  </div>
 </div>
 
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+/* ============ AUDIO (synthesized, no external files) ============ */
+let actx = null, masterGain = null, muted = false;
+function initAudio(){
+  if(actx) return;
+  actx = new (window.AudioContext||window.webkitAudioContext)();
+  masterGain = actx.createGain();
+  masterGain.gain.value = 0.25;
+  masterGain.connect(actx.destination);
+  startAmbience();
+}
+function tone(freq, dur, type='sine', vol=0.5, delay=0){
+  if(!actx||muted) return;
+  const t0 = actx.currentTime + delay;
+  const osc = actx.createOscillator();
+  const g = actx.createGain();
+  osc.type = type; osc.frequency.value = freq;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0+0.03);
+  g.gain.exponentialRampToValueAtTime(0.001, t0+dur);
+  osc.connect(g); g.connect(masterGain);
+  osc.start(t0); osc.stop(t0+dur+0.05);
+}
+function playBell(){ tone(196,1.8,'sine',0.35); tone(294,1.8,'sine',0.15,0.05); }
+function playClick(){ tone(880,0.08,'square',0.12); }
+function playDeath(){ tone(110,1.4,'sawtooth',0.3); tone(80,1.8,'sine',0.25,0.15); }
+function playVoteTick(){ tone(520,0.12,'triangle',0.15); }
+function playWin(town){ if(town){ tone(523,0.3,'sine',0.3); tone(659,0.3,'sine',0.25,0.15); tone(784,0.5,'sine',0.25,0.3);} else { tone(220,0.4,'sawtooth',0.25); tone(196,0.6,'sawtooth',0.2,0.2);} }
+function startAmbience(){
+  if(!actx||muted) return;
+  const bufSize = actx.sampleRate*2;
+  const buf = actx.createBuffer(1, bufSize, actx.sampleRate);
+  const data = buf.getChannelData(0);
+  for(let i=0;i<bufSize;i++) data[i] = (Math.random()*2-1)*0.5;
+  const src = actx.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  const filter = actx.createBiquadFilter();
+  filter.type='lowpass'; filter.frequency.value=280;
+  const g = actx.createGain(); g.gain.value = 0.035;
+  src.connect(filter); filter.connect(g); g.connect(masterGain);
+  src.start();
+}
+document.getElementById('mute-btn').addEventListener('click', ()=>{
+  muted = !muted;
+  document.getElementById('mute-btn').textContent = muted ? '🔇' : '🔊';
+  if(masterGain) masterGain.gain.value = muted?0:0.25;
+});
+
 /* ============ GAME DATA ============ */
 const BOT_NAMES = ['Ahmet','Ayşe','Can','Deniz','Elif','Kerem','Zeynep','Burak'];
-const PLAYER_COLORS = [0xd99a3d,0x6fa8dc,0x93c47d,0xe06666,0xb4a7d6,0xf6b26b,0x76a5af,0xffe599];
+const PLAYER_COLORS = [0xd99a3d,0x6fa8dc,0x93c47d,0xe06666,0xb4a7d6,0xf6b26b,0x76a5af,0xffe599,0xea9999];
+
 const ROLE_INFO = {
-  MAFIA:   { label:'Katil',     desc:'Geceleri müttefiklerinle birlikte bir kurban seçersin. Kimliğini gizli tut.', cls:'mafia' },
-  DOCTOR:  { label:'Doktor',    desc:'Her gece bir kişiyi (kendin dahil) koruyabilirsin. Katilin hedefini kurtarabilirsin.', cls:'doctor' },
-  SHERIFF: { label:'Dedektif',  desc:'Her gece bir kişiyi araştırıp katil olup olmadığını öğrenirsin.', cls:'sheriff' },
-  VILLAGER:{ label:'Vatandaş',  desc:'Özel bir yeteneğin yok. Gündüz tartışıp doğru kişiyi asmaya çalış.', cls:'villager' }
+  MAFIA:     { label:'Katil',      desc:'Geceleri müttefiklerinle birlikte bir kurban seçersin. Kimliğini gizli tut.', cls:'mafia' },
+  DOCTOR:    { label:'Doktor',     desc:'Her gece bir kişiyi (kendin dahil) koruyabilirsin. Katilin hedefini kurtarabilirsin.', cls:'doctor' },
+  SHERIFF:   { label:'Dedektif',   desc:'Her gece bir kişiyi araştırıp katil olup olmadığını öğrenirsin.', cls:'sheriff' },
+  VIGILANTE: { label:'İnfazcı',    desc:'Elinde sınırlı sayıda mermi var. Şüphelendiğin birini geceleri vurabilirsin — ama yanılırsan köyü zayıflatırsın.', cls:'vigilante' },
+  BODYGUARD: { label:'Muhafız',    desc:'Geceleri birini koru. Saldırıya uğrarsa onun yerine sen ölürsün, o kurtulur.', cls:'bodyguard' },
+  ESCORT:    { label:'Oyalayıcı',  desc:'Geceleri birini oyala — o gece hiçbir özel yeteneğini kullanamaz.', cls:'escort' },
+  JESTER:    { label:'Soytarı',    desc:'Kimseyle takımın yok. Tek amacın: halkı seni asmaya ikna etmek. Asılırsan TEK BAŞINA kazanırsın!', cls:'jester' },
+  VILLAGER:  { label:'Vatandaş',   desc:'Özel bir yeteneğin yok. Gündüz tartışıp doğru kişiyi asmaya çalış.', cls:'villager' }
 };
+const ROLE_SET_9 = ['MAFIA','MAFIA','DOCTOR','SHERIFF','VIGILANTE','BODYGUARD','ESCORT','JESTER','VILLAGER'];
+
 const SUSPECT_LINES = [
   "{a} bence çok sessiz kalıyor, şüpheliyim.",
   "{a} dün gece {b}'yi savunmuştu, tuhaf.",
   "Bence katil {a} olabilir, davranışları garip.",
-  "{a}'e güveniyorum, oyunu iyi oynuyor.",
   "{a} neden bu kadar hızlı oy verdi ki?",
   "Bir şey saklıyor gibisin {a}.",
   "{a} ile {b} birbirini kolluyor gibi geldi bana.",
-  "Ben masumum, lütfen bana oy vermeyin.",
   "{a} dedektif olabilir mi dersiniz?",
   "Dün gece {a} evinin dışında görülmüş olabilir.",
   "Kanıt yok ama içime doğuyor: {a}.",
-  "{a} çok fazla konuşuyor, dikkat çekmeye çalışıyor sanki."
+  "{a} çok fazla konuşuyor, dikkat çekmeye çalışıyor sanki.",
+  "{a}, sence de kendini fazla savunuyor musun?"
 ];
 const DEFEND_LINES = [
   "Ben katil değilim, yemin ederim.",
   "Bana oy vermeden önce iyi düşünün.",
   "{a} bence yanlış kişiyi işaret ediyor.",
   "Panik yapmayalım, kanıtsız oy vermeyelim.",
-  "Bence bu gece kimseyi asmamalıyız."
+  "Bence bu gece kimseyi asmamalıyız.",
+  "{a}'e güveniyorum, oyunu iyi oynuyor."
+];
+const CLAIM_LINES = [
+  "Ben Dedektifim ve {a} KESİN bir katil!",
+  "İnanmayabilirsiniz ama ben Dedektifim — {a}'i araştırdım, katil o!",
 ];
 
 let scene, camera, renderer, controls, clock;
 let houseGroup, playerMeshes = {}, moonLight, sunLight, ambientLight, skyColor;
-let dayNightT = 0; // 0 = night, 1 = day
+let dayNightT = 0;
 let players = [];
 let humanId = 'you';
 let round = 1;
 let phase = 'INTRO';
-let nightAction = { mafiaTarget:null, doctorTarget:null, sheriffTarget:null, mafiaVotes:{} };
+let nightAction = {};
 let currentVotes = {};
 let selectedTarget = null;
 let sheriffResults = [];
 let timerInterval = null;
+let suspicion = {};
+let vigilanteBulletsLeft = 2;
+let sheriffHasClaimed = false;
+
+/* online mode state */
+let mode = 'local';
+let socket = null;
+let roomCode = null;
+let isHost = false;
+let onlineIdToName = {};
 
 /* ============ THREE.JS SCENE ============ */
 function initScene(){
@@ -306,11 +454,9 @@ function initScene(){
   sunLight.castShadow = true;
   scene.add(sunLight);
 
-  // hemisphere fill light so shadows never go pitch black
   const hemi = new THREE.HemisphereLight(0x6f86b0, 0x1c2416, 0.6);
   scene.add(hemi);
 
-  // --- free textures loaded from the three.js example asset library (CC/BSD, bundled with three.js) ---
   const texLoader = new THREE.TextureLoader();
   const grassTex = texLoader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
   grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
@@ -326,7 +472,6 @@ function initScene(){
   const moonTex = texLoader.load('https://threejs.org/examples/textures/planets/moon_1024.jpg');
   moonTex.colorSpace = THREE.SRGBColorSpace;
 
-  // glowing moon sphere in the sky
   const moonMesh = new THREE.Mesh(
     new THREE.SphereGeometry(2.2, 24, 24),
     new THREE.MeshBasicMaterial({ map: moonTex, color: 0xbfd4ff })
@@ -337,7 +482,6 @@ function initScene(){
   moonGlow.position.copy(moonMesh.position);
   scene.add(moonGlow);
 
-  // starfield
   const starTex = texLoader.load('https://threejs.org/examples/textures/sprites/circle.png');
   const starGeo = new THREE.BufferGeometry();
   const starCount = 500;
@@ -355,7 +499,6 @@ function initScene(){
   const stars = new THREE.Points(starGeo, starMat);
   scene.add(stars);
 
-  // ground
   const groundGeo = new THREE.CircleGeometry(20, 48);
   const groundMat = new THREE.MeshStandardMaterial({ map:grassTex, color:0x8fa583, roughness:1 });
   const ground = new THREE.Mesh(groundGeo, groundMat);
@@ -363,7 +506,6 @@ function initScene(){
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // village square ring
   const ringGeo = new THREE.RingGeometry(4.6, 5, 40);
   const ringMat = new THREE.MeshStandardMaterial({ map:woodTex, color:0x9a8a6a, roughness:1, side:THREE.DoubleSide });
   const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -372,8 +514,6 @@ function initScene(){
   scene.add(ring);
 
   buildTrees();
-
-  // center gallows
   buildGallows();
 
   houseGroup = new THREE.Group();
@@ -405,6 +545,7 @@ function buildTrees(){
   }
 }
 
+const torchLights = [];
 function buildGallows(){
   const g = new THREE.Group();
   const woodMat = new THREE.MeshStandardMaterial({ color:0x3b2a1e, roughness:0.9 });
@@ -417,7 +558,6 @@ function buildGallows(){
   g.add(p1,p2,beam);
   scene.add(g);
 
-  // torches around ring
   for(let i=0;i<6;i++){
     const a = (i/6)*Math.PI*2;
     const tx = Math.cos(a)*5.4, tz = Math.sin(a)*5.4;
@@ -434,11 +574,10 @@ function buildGallows(){
     torchLights.push(flame);
   }
 }
-const torchLights = [];
 
 function buildHouses(n){
   houseGroup.clear();
-  const roofColors = [0x7a4a3a,0x5a4a6a,0x4a5a4a,0x6a4a4a,0x4a4a6a,0x5a5a3a,0x6a5a4a,0x4a5a6a];
+  const roofColors = [0x7a4a3a,0x5a4a6a,0x4a5a4a,0x6a4a4a,0x4a4a6a,0x5a5a3a,0x6a5a4a,0x4a5a6a,0x6a4a5a];
   for(let i=0;i<n;i++){
     const a = (i/n)*Math.PI*2;
     const r = 9.5;
@@ -479,7 +618,7 @@ function buildPlayerMeshes(){
     lantern.position.set(0,1,0.3);
     g.add(lantern);
     scene.add(g);
-    playerMeshes[p.id] = { group:g, body, head, lantern, baseY:0 };
+    playerMeshes[p.id] = { group:g, body, head, lantern, baseY:0, bobPhase:Math.random()*10 };
   });
 }
 
@@ -491,6 +630,13 @@ function markPlayerDead(id){
   m.lantern.intensity = 0;
   m.body.material.color.multiplyScalar(0.4);
   m.head.material.color.multiplyScalar(0.4);
+  m.dead = true;
+}
+
+function pulseSpeaker(id){
+  const m = playerMeshes[id];
+  if(!m || m.dead) return;
+  m.speakUntil = performance.now() + 1200;
 }
 
 function onResize(){
@@ -525,13 +671,26 @@ function animate(){
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
   torchLights.forEach(l=>{
-    l.intensity = 1.2 + Math.sin(t*8 + l.userData.flicker)*0.25 + Math.random()*0.08;
+    l.intensity = 2.2 + Math.sin(t*8 + l.userData.flicker)*0.4 + Math.random()*0.12;
+  });
+  const now = performance.now();
+  Object.values(playerMeshes).forEach(m=>{
+    if(m.dead) return;
+    m.group.position.y = Math.sin(t*1.2 + m.bobPhase)*0.03;
+    if(m.speakUntil && now < m.speakUntil){
+      const s = 1 + Math.sin(now*0.02)*0.06;
+      m.group.scale.set(s,s,s);
+      m.lantern.intensity = 1.8;
+    } else {
+      m.group.scale.set(1,1,1);
+      m.lantern.intensity = 1.1;
+    }
   });
   controls.update();
   renderer.render(scene, camera);
 }
 
-/* ============ GAME LOGIC ============ */
+/* ============ GAME LOGIC (shared local/online) ============ */
 function shuffle(arr){
   const a = arr.slice();
   for(let i=a.length-1;i>0;i--){
@@ -540,23 +699,28 @@ function shuffle(arr){
   }
   return a;
 }
+function alivePlayers(){ return players.filter(p=>p.alive); }
+function mafiaAlive(){ return alivePlayers().filter(p=>p.role==='MAFIA'); }
+function townAlive(){ return alivePlayers().filter(p=>p.role!=='MAFIA' && p.role!=='JESTER'); }
+function getPlayer(id){ return players.find(p=>p.id===id); }
 
 function setupPlayers(){
   players = [];
   players.push({ id:humanId, name:'Sen', isHuman:true, alive:true, color:PLAYER_COLORS[0], role:null });
-  const names = shuffle(BOT_NAMES).slice(0,6);
+  const names = shuffle(BOT_NAMES);
   names.forEach((name,i)=>{
     players.push({ id:'bot_'+i, name, isHuman:false, alive:true, color:PLAYER_COLORS[i+1], role:null });
   });
-  const roles = ['MAFIA','MAFIA','DOCTOR','SHERIFF','VILLAGER','VILLAGER','VILLAGER'];
-  const shuffledRoles = shuffle(roles);
+  const shuffledRoles = shuffle(ROLE_SET_9);
   players.forEach((p,i)=>{ p.role = shuffledRoles[i]; });
+  suspicion = {};
+  players.forEach(p=>{
+    suspicion[p.id] = {};
+    players.forEach(q=>{ if(q.id!==p.id) suspicion[p.id][q.id] = 0; });
+  });
+  vigilanteBulletsLeft = 2;
+  sheriffHasClaimed = false;
 }
-
-function alivePlayers(){ return players.filter(p=>p.alive); }
-function mafiaAlive(){ return alivePlayers().filter(p=>p.role==='MAFIA'); }
-function townAlive(){ return alivePlayers().filter(p=>p.role!=='MAFIA'); }
-function getPlayer(id){ return players.find(p=>p.id===id); }
 
 function renderRoleCard(){
   const me = getPlayer(humanId);
@@ -573,6 +737,7 @@ function renderPlayerList(){
   players.forEach(p=>{
     const row = document.createElement('div');
     row.className = 'player-row' + (p.alive?'':' dead') + (p.id===humanId?' you':'');
+    row.id = 'row-'+p.id;
     const dot = document.createElement('div');
     dot.className = 'dot';
     dot.style.background = '#'+p.color.toString(16).padStart(6,'0');
@@ -580,7 +745,7 @@ function renderPlayerList(){
     name.className = 'pname';
     name.textContent = p.name + (p.id===humanId?' (sen)':'');
     row.appendChild(dot); row.appendChild(name);
-    if(phase==='VOTE' && p.alive && p.id!==humanId){
+    if(phase==='VOTE' && p.alive && p.id!==humanId && getPlayer(humanId).alive){
       const btn = document.createElement('button');
       btn.className = 'vote-btn';
       btn.textContent = 'Oy Ver';
@@ -610,8 +775,12 @@ function log(html, sys=false){
 
 function say(playerId, text){
   const p = getPlayer(playerId);
+  if(!p) return;
   const color = '#'+p.color.toString(16).padStart(6,'0');
   log(`<span class="who" style="color:${color}">${p.name}:</span> ${text}`);
+  pulseSpeaker(playerId);
+  const row = document.getElementById('row-'+playerId);
+  if(row){ row.classList.add('speaking'); setTimeout(()=>row.classList.remove('speaking'),1200); }
 }
 
 function showBanner(text, ms=3200){
@@ -628,7 +797,7 @@ function setPhaseUI(label){
 }
 
 function startTimer(seconds, onDone){
-  clearInterval(timerInterval);
+  clearInterval(timerInterval); clearTimeout(timerInterval);
   const bar = document.getElementById('timer-bar');
   bar.style.transition = 'none';
   bar.style.width = '100%';
@@ -639,13 +808,36 @@ function startTimer(seconds, onDone){
   timerInterval = setTimeout(()=>{ onDone(); }, seconds*1000);
 }
 
+/* ---------- suspicion-driven bot brains ---------- */
+function bumpSuspicion(targetId, delta){
+  players.forEach(p=>{
+    if(p.isHuman || p.id===targetId) return;
+    if(!suspicion[p.id]) return;
+    suspicion[p.id][targetId] = (suspicion[p.id][targetId]||0) + delta * (0.7+Math.random()*0.6);
+  });
+}
+function suspicionScore(bot, target){
+  return (suspicion[bot.id] && suspicion[bot.id][target.id]) || 0;
+}
+function pickVoteTarget(bot){
+  let opts = alivePlayers().filter(p=>p.id!==bot.id);
+  if(bot.role==='MAFIA'){
+    const nonMafia = opts.filter(p=>p.role!=='MAFIA');
+    if(nonMafia.length) opts = nonMafia;
+  }
+  if(!opts.length) return null;
+  const ranked = opts.map(p=>({p, score:suspicionScore(bot,p)+Math.random()*3}))
+    .sort((a,b)=>b.score-a.score);
+  return ranked[0].p;
+}
+
 /* ---------- NIGHT PHASE ---------- */
 function startNight(){
   phase = 'NIGHT';
   resolveNight._done = false;
   setDayNight(0);
   setPhaseUI('GECE');
-  nightAction = { mafiaTarget:null, doctorTarget:null, sheriffTarget:null };
+  nightAction = { mafiaTarget:null, doctorTarget:null, bodyguardTarget:null, sheriffTarget:null, escortTarget:null, vigilanteTarget:null };
   renderPlayerList();
   showBanner('Gece çöktü. Köy uykuya daldı...');
   const me = getPlayer(humanId);
@@ -670,6 +862,12 @@ function startNight(){
   if(me.role==='MAFIA'){ title.textContent='Kimi öldüreceksiniz?'; pool = alivePlayers().filter(p=>p.role!=='MAFIA'); }
   else if(me.role==='DOCTOR'){ title.textContent='Kimi koruyacaksın?'; pool = alivePlayers(); }
   else if(me.role==='SHERIFF'){ title.textContent='Kimi araştıracaksın?'; pool = alivePlayers().filter(p=>p.id!==humanId); }
+  else if(me.role==='VIGILANTE'){
+    title.textContent = vigilanteBulletsLeft>0 ? `Kimi vuracaksın? (${vigilanteBulletsLeft} mermi kaldı)` : 'Merminiz kalmadı.';
+    pool = vigilanteBulletsLeft>0 ? alivePlayers().filter(p=>p.id!==humanId) : [];
+  }
+  else if(me.role==='BODYGUARD'){ title.textContent='Kimi koruyacaksın?'; pool = alivePlayers(); }
+  else if(me.role==='ESCORT'){ title.textContent='Kimi oyalayacaksın?'; pool = alivePlayers().filter(p=>p.id!==humanId); }
   else { title.textContent='Uyuyorsun... rolün yok.'; }
 
   if(pool.length===0){
@@ -685,20 +883,25 @@ function startNight(){
         btn.classList.add('selected');
         selectedTarget = p.id;
         confirm.disabled = false;
+        playClick();
       };
       targets.appendChild(btn);
     });
   }
 
   confirm.onclick = ()=>{
+    playClick();
     if(me.role==='MAFIA') nightAction.mafiaTarget = selectedTarget;
     if(me.role==='DOCTOR') nightAction.doctorTarget = selectedTarget;
     if(me.role==='SHERIFF') nightAction.sheriffTarget = selectedTarget;
+    if(me.role==='VIGILANTE' && selectedTarget){ nightAction.vigilanteTarget = selectedTarget; vigilanteBulletsLeft--; }
+    if(me.role==='BODYGUARD') nightAction.bodyguardTarget = selectedTarget;
+    if(me.role==='ESCORT') nightAction.escortTarget = selectedTarget;
     confirm.disabled = true;
     resolveNight();
   };
 
-  startTimer(20, resolveNight);
+  startTimer(22, resolveNight);
 }
 
 function resolveNight(){
@@ -707,38 +910,60 @@ function resolveNight(){
   clearInterval(timerInterval); clearTimeout(timerInterval);
   document.getElementById('action-panel').classList.add('hidden');
 
-  // bots act
-  const mafiaBots = alivePlayers().filter(p=>p.role==='MAFIA' && !p.isHuman);
-  const doctorBot = alivePlayers().find(p=>p.role==='DOCTOR' && !p.isHuman);
-  const sheriffBot = alivePlayers().find(p=>p.role==='SHERIFF' && !p.isHuman);
+  const escortBot = alivePlayers().find(p=>p.role==='ESCORT' && !p.isHuman);
+  if(escortBot && !nightAction.escortTarget){
+    const opts = alivePlayers().filter(p=>p.id!==escortBot.id);
+    nightAction.escortTarget = shuffle(opts)[0]?.id || null;
+  }
+  const blockedId = nightAction.escortTarget;
 
+  const mafiaBots = alivePlayers().filter(p=>p.role==='MAFIA' && !p.isHuman);
+  const mafiaAllBlocked = mafiaAlive().every(m=>m.id===blockedId) && mafiaAlive().length>0;
   if(!nightAction.mafiaTarget){
     const targets = alivePlayers().filter(p=>p.role!=='MAFIA');
-    if(targets.length) nightAction.mafiaTarget = shuffle(targets)[0].id;
-  } else if(mafiaBots.length){
-    // human is mafia; bots agree with human's target automatically (simplified coordination)
+    if(targets.length){
+      const bot = mafiaBots[0];
+      const t = bot ? pickVoteTarget(bot) : shuffle(targets)[0];
+      nightAction.mafiaTarget = (t||shuffle(targets)[0])?.id;
+    }
   }
-  if(mafiaBots.length && !getPlayer(humanId).alive===false && getPlayer(humanId).role!=='MAFIA'){
-    // no human mafia input already set target above if needed
+  if(mafiaAllBlocked) nightAction.mafiaTarget = null;
+
+  const doctorBot = alivePlayers().find(p=>p.role==='DOCTOR' && !p.isHuman);
+  if(doctorBot && doctorBot.id!==blockedId && !nightAction.doctorTarget){
+    nightAction.doctorTarget = shuffle(alivePlayers())[0]?.id;
   }
-  if(doctorBot){
-    const opts = alivePlayers();
-    nightAction.doctorTarget = nightAction.doctorTarget || shuffle(opts)[0]?.id;
+  if(getPlayer(humanId).role==='DOCTOR' && humanId===blockedId) nightAction.doctorTarget = null;
+
+  const bodyguardBot = alivePlayers().find(p=>p.role==='BODYGUARD' && !p.isHuman);
+  if(bodyguardBot && bodyguardBot.id!==blockedId && !nightAction.bodyguardTarget){
+    const t = pickVoteTarget(bodyguardBot) || shuffle(alivePlayers().filter(p=>p.id!==bodyguardBot.id))[0];
+    nightAction.bodyguardTarget = t?.id;
   }
-  if(sheriffBot){
+  if(getPlayer(humanId).role==='BODYGUARD' && humanId===blockedId) nightAction.bodyguardTarget = null;
+
+  const sheriffBot = alivePlayers().find(p=>p.role==='SHERIFF' && !p.isHuman);
+  if(sheriffBot && sheriffBot.id!==blockedId){
     const opts = alivePlayers().filter(p=>p.id!==sheriffBot.id);
     const target = shuffle(opts)[0];
     if(target){
-      sheriffResults.push({round, name:target.name, isMafia:target.role==='MAFIA'});
+      sheriffResults.push({round, botOwner:sheriffBot.id, name:target.name, id:target.id, isMafia:target.role==='MAFIA'});
+      if(target.role==='MAFIA') suspicion[sheriffBot.id][target.id] += 40;
     }
   }
   const me = getPlayer(humanId);
-  if(me.alive && me.role==='SHERIFF' && nightAction.sheriffTarget){
+  if(me.alive && me.role==='SHERIFF' && nightAction.sheriffTarget && humanId!==blockedId){
     const t = getPlayer(nightAction.sheriffTarget);
-    sheriffResults.push({round, name:t.name, isMafia:t.role==='MAFIA'});
+    sheriffResults.push({round, botOwner:humanId, name:t.name, id:t.id, isMafia:t.role==='MAFIA'});
   }
 
-  round += 1<0?0:0; // noop guard
+  const vigilanteBot = alivePlayers().find(p=>p.role==='VIGILANTE' && !p.isHuman);
+  if(vigilanteBot && vigilanteBot.id!==blockedId && vigilanteBot._bullets===undefined) vigilanteBot._bullets = 2;
+  if(vigilanteBot && vigilanteBot.id!==blockedId && vigilanteBot._bullets>0 && Math.random()<0.35){
+    const t = pickVoteTarget(vigilanteBot);
+    if(t){ nightAction.vigilanteBotTarget = t.id; vigilanteBot._bullets--; }
+  }
+
   setTimeout(()=>revealMorning(), 800);
 }
 
@@ -746,71 +971,125 @@ function revealMorning(){
   phase = 'REVEAL';
   setDayNight(1);
   setPhaseUI('SABAH');
-  const victimId = nightAction.mafiaTarget;
-  const saved = victimId && nightAction.doctorTarget===victimId;
   document.getElementById('action-panel').classList.add('hidden');
 
-  let msg = '';
-  if(victimId && !saved){
-    const v = getPlayer(victimId);
-    v.alive = false;
-    markPlayerDead(v.id);
-    msg = `☠️ ${v.name} bu gece öldürüldü. (${ROLE_INFO[v.role].label})`;
-    log(`<span class="sys">${v.name} bu gece öldürüldü. Rolü: ${ROLE_INFO[v.role].label}</span>`, true);
-  } else if(victimId && saved){
-    msg = `🩹 Bu gece birine saldırıldı ama doktor onu kurtardı!`;
-    log(`<span class="sys">Bu gece bir saldırı oldu ama kurban kurtarıldı!</span>`, true);
-  } else {
-    msg = 'Sakin bir gece geçti, kimse ölmedi.';
-    log(`<span class="sys">Sakin bir gece geçti.</span>`, true);
+  const deaths = [];
+  const victimId = nightAction.mafiaTarget;
+  const savedByDoctor = victimId && nightAction.doctorTarget===victimId;
+  const savedByBodyguard = victimId && nightAction.bodyguardTarget===victimId;
+  if(victimId && !savedByDoctor && !savedByBodyguard){
+    deaths.push(victimId);
   }
-  showBanner(msg, 4000);
+  if(victimId && savedByBodyguard){
+    const guard = alivePlayers().find(p=>p.role==='BODYGUARD');
+    if(guard && guard.id !== victimId) deaths.push(guard.id);
+  }
+  const vigTargetId = nightAction.vigilanteTarget || nightAction.vigilanteBotTarget;
+  if(vigTargetId){
+    const vigSaved = vigTargetId===nightAction.doctorTarget;
+    if(!vigSaved) deaths.push(vigTargetId);
+  }
+
+  const uniqueDeaths = [...new Set(deaths)];
+
+  if(uniqueDeaths.length===0){
+    showBanner('Sakin bir gece geçti, kimse ölmedi.', 4000);
+    log(`<span class="sys">Sakin bir gece geçti.</span>`, true);
+  } else {
+    uniqueDeaths.forEach((id,i)=>{
+      const v = getPlayer(id);
+      if(!v || !v.alive) return;
+      v.alive = false;
+      markPlayerDead(v.id);
+      setTimeout(()=>{
+        playDeath();
+        showBanner(`☠️ ${v.name} bu gece öldürüldü. (${ROLE_INFO[v.role].label})`, 4000);
+        log(`<span class="sys">${v.name} bu gece öldürüldü. Rolü: ${ROLE_INFO[v.role].label}</span>`, true);
+      }, i*900);
+    });
+  }
 
   const me = getPlayer(humanId);
   if(me.role==='SHERIFF' && me.alive){
-    const res = sheriffResults.filter(r=>r.round===round).pop();
+    const res = sheriffResults.filter(r=>r.round===round && r.botOwner===humanId).pop();
     if(res){
       setTimeout(()=>{
         showBanner(`🔎 Araştırma sonucu: ${res.name} ${res.isMafia?'BİR KATİL!':'masum görünüyor.'}`, 4500);
-      }, 4200);
+      }, uniqueDeaths.length*900 + 1200);
     }
   }
   renderPlayerList();
 
   if(checkWin()) return;
-  setTimeout(()=>startDay(), 4600);
+  setTimeout(()=>startDay(), uniqueDeaths.length*900 + 3800);
 }
 
 /* ---------- DAY / VOTE PHASE ---------- */
 function startDay(){
   phase = 'DAY';
   setPhaseUI('GÜNDÜZ');
+  playBell();
   showBanner('Tartışma zamanı. Kim şüpheli?');
   renderPlayerList();
   document.getElementById('action-panel').classList.add('hidden');
 
+  const sheriffBotAlive = alivePlayers().find(p=>p.role==='SHERIFF' && !p.isHuman);
   const speakers = shuffle(alivePlayers().filter(p=>!p.isHuman));
-  let delay = 800;
+  let delay = 900;
+
+  if(sheriffBotAlive && !sheriffHasClaimed && Math.random()<0.65){
+    const found = sheriffResults.find(r=>r.botOwner===sheriffBotAlive.id && r.isMafia && getPlayer(r.id)?.alive);
+    if(found){
+      sheriffHasClaimed = true;
+      setTimeout(()=>{
+        const line = shuffle(CLAIM_LINES)[0].replace('{a}', found.name);
+        say(sheriffBotAlive.id, line);
+        bumpSuspicion(found.id, 35);
+        renderPlayerList();
+      }, delay);
+      delay += 1800;
+    }
+  }
+
   speakers.forEach(sp=>{
+    if(sp.id===sheriffBotAlive?.id && sheriffHasClaimed) return;
     setTimeout(()=>{
       const others = alivePlayers().filter(p=>p.id!==sp.id);
       if(others.length===0) return;
-      const a = shuffle(others)[0].name;
-      const b = shuffle(others)[0].name;
-      const useDefend = Math.random()<0.25;
+      let target;
+      if(sp.role==='JESTER'){
+        target = shuffle(others)[0];
+      } else {
+        const ranked = others.map(o=>({o,score:suspicionScore(sp,o)+Math.random()*4})).sort((a,b)=>b.score-a.score);
+        target = ranked[0].o;
+      }
+      const b = shuffle(others.filter(o=>o.id!==target.id))[0]?.name || target.name;
+      const useDefend = sp.role!=='JESTER' && Math.random()<0.25;
       const line = (useDefend?shuffle(DEFEND_LINES):shuffle(SUSPECT_LINES))[0]
-        .replace('{a}', a).replace('{b}', b);
+        .replace('{a}', target.name).replace('{b}', b);
       say(sp.id, line);
+      if(!useDefend) bumpSuspicion(target.id, 4);
+      else bumpSuspicion(target.id, -3);
+      renderPlayerList();
     }, delay);
-    delay += 1500 + Math.random()*900;
+    delay += 1600 + Math.random()*900;
   });
 
-  startTimer(Math.max(delay/1000 + 2, 14), startVote);
+  startTimer(Math.max(delay/1000 + 2, 15), startVote);
 }
 
 function castHumanVote(targetId){
   if(currentVotes[humanId]) return;
+  if(mode==='online' && socket){
+    socket.emit('vote:cast', { targetId });
+    currentVotes[humanId] = targetId;
+    playVoteTick();
+    say(humanId, `oy: ${getPlayer(targetId).name}`);
+    renderPlayerList();
+    return;
+  }
   currentVotes[humanId] = targetId;
+  playVoteTick();
   say(humanId, `oy: ${getPlayer(targetId).name}`);
   renderPlayerList();
   checkVotesComplete();
@@ -828,28 +1107,19 @@ function startVote(){
   bots.forEach((b,i)=>{
     setTimeout(()=>{
       if(!getPlayer(b.id).alive) return;
-      const opts = alivePlayers().filter(p=>p.id!==b.id);
       let target;
-      if(b.role==='MAFIA'){
-        const nonMafia = opts.filter(p=>p.role!=='MAFIA');
-        target = shuffle(nonMafia.length?nonMafia:opts)[0];
+      if(b.role==='JESTER'){
+        target = shuffle(alivePlayers().filter(p=>p.id!==b.id))[0];
       } else {
-        const suspectResult = sheriffResults.find(r=>{
-          const rp = players.find(pp=>pp.name===r.name);
-          return rp && rp.alive && r.isMafia;
-        });
-        if(b.role==='SHERIFF' && suspectResult){
-          target = players.find(pp=>pp.name===suspectResult.name);
-        } else {
-          target = shuffle(opts)[0];
-        }
+        target = pickVoteTarget(b);
       }
       if(target){
         currentVotes[b.id] = target.id;
+        playVoteTick();
         renderPlayerList();
         checkVotesComplete();
       }
-    }, 600 + i*900);
+    }, 600 + i*800);
   });
 
   startTimer(18, tallyVotes);
@@ -857,13 +1127,10 @@ function startVote(){
 
 function checkVotesComplete(){
   const need = alivePlayers().length;
-  if(Object.keys(currentVotes).length >= need){
-    tallyVotes();
-  }
+  if(Object.keys(currentVotes).length >= need) tallyVotes();
 }
 
 function tallyVotes(){
-  if(tallyVotes._doneRound === round && phase!=='VOTE') return;
   if(phase!=='VOTE') return;
   clearTimeout(timerInterval); clearInterval(timerInterval);
   phase = 'EXECUTION';
@@ -883,10 +1150,15 @@ function tallyVotes(){
   const victim = getPlayer(top[0]);
   victim.alive = false;
   markPlayerDead(victim.id);
-  const wasMafia = victim.role==='MAFIA';
+  playDeath();
   showBanner(`⚖️ ${victim.name} asıldı. Rolü: ${ROLE_INFO[victim.role].label}`, 4200);
   log(`<span class="sys">${victim.name} halk tarafından asıldı. Rolü: ${ROLE_INFO[victim.role].label}</span>`, true);
   renderPlayerList();
+
+  if(victim.role==='JESTER'){
+    setTimeout(()=>endGame('jester', 'Soytarı halkı kandırıp astırmayı başardı!'), 2400);
+    return;
+  }
 
   setTimeout(()=>{ round++; if(!checkWin()) startNight(); }, 4600);
 }
@@ -895,29 +1167,38 @@ function tallyVotes(){
 function checkWin(){
   const m = mafiaAlive().length;
   const t = townAlive().length;
-  if(m===0){
-    endGame(true, 'Köy kazandı! Tüm katiller bertaraf edildi.');
-    return true;
-  }
-  if(m >= t){
-    endGame(false, 'Katiller kazandı! Köy ele geçirildi.');
-    return true;
-  }
+  if(m===0){ endGame('town', 'Köy kazandı! Tüm katiller bertaraf edildi.'); return true; }
+  if(m >= t){ endGame('mafia', 'Katiller kazandı! Köy ele geçirildi.'); return true; }
   return false;
 }
 
-function endGame(townWon, message){
+function endGame(winner, message){
   phase = 'END';
-  clearTimeout(timerInterval); clearInterval(timerInterval);
+  clearTimeout(timerInterval); clearTimeout(timerInterval);
   document.getElementById('action-panel').classList.add('hidden');
+  playWin(winner==='town');
   const overlay = document.getElementById('overlay');
   overlay.classList.remove('hidden');
-  overlay.innerHTML = `
-    <h1 style="color:${townWon?'var(--teal)':'var(--blood)'}">${townWon?'KÖY KAZANDI':'KATİLLER KAZANDI'}</h1>
+  document.getElementById('screen-menu').style.display='none';
+  document.getElementById('screen-online').style.display='none';
+  document.getElementById('screen-lobby').style.display='none';
+  let existing = document.getElementById('screen-end');
+  if(existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'screen-end';
+  const color = winner==='town' ? 'var(--teal)' : (winner==='jester' ? 'var(--pink)' : 'var(--blood)');
+  const title = winner==='town' ? 'KÖY KAZANDI' : (winner==='jester' ? 'SOYTARI KAZANDI' : 'KATİLLER KAZANDI');
+  div.innerHTML = `
+    <h1 style="color:${color}">${title}</h1>
     <p class="desc">${message}<br><br>Senin rolün: <b>${ROLE_INFO[getPlayer(humanId).role].label}</b></p>
-    <button id="restart-btn">Tekrar Oyna</button>
+    <button class="primary" id="restart-btn">Tekrar Oyna</button>
   `;
-  document.getElementById('restart-btn').onclick = ()=>{ overlay.classList.add('hidden'); resetAndStart(); };
+  overlay.appendChild(div);
+  document.getElementById('restart-btn').onclick = ()=>{
+    div.remove();
+    document.getElementById('screen-menu').style.display='';
+    overlay.classList.remove('hidden');
+  };
 }
 
 /* ---------- CHAT INPUT ---------- */
@@ -927,22 +1208,24 @@ document.getElementById('chat-form').addEventListener('submit', (e)=>{
   const text = input.value.trim();
   if(!text) return;
   say(humanId, text);
+  if(mode==='online' && socket) socket.emit('chat:message', { text });
   input.value = '';
-  if(phase==='DAY' && Math.random()<0.6){
+  if(mode==='local' && phase==='DAY' && Math.random()<0.5){
     const alive = alivePlayers().filter(p=>!p.isHuman);
     if(alive.length){
       const bot = shuffle(alive)[0];
       setTimeout(()=>{
         const others = alivePlayers().filter(p=>p.id!==bot.id);
         const line = shuffle(SUSPECT_LINES)[0].replace('{a}', shuffle(others)[0]?.name||'birisi').replace('{b}', shuffle(others)[0]?.name||'birisi');
-        say(bot.id, Math.random()<0.4 ? shuffle(DEFEND_LINES)[0].replace('{a}',humanId===bot.id?'':getPlayer(humanId).name) : line);
+        say(bot.id, Math.random()<0.4 ? shuffle(DEFEND_LINES)[0].replace('{a}',getPlayer(humanId).name) : line);
       }, 900+Math.random()*1200);
     }
   }
 });
 
-/* ---------- INIT / RESTART ---------- */
+/* ---------- LOCAL MODE INIT ---------- */
 function resetAndStart(){
+  mode = 'local';
   round = 1;
   sheriffResults = [];
   document.getElementById('chat-log').innerHTML = '';
@@ -951,17 +1234,185 @@ function resetAndStart(){
   buildPlayerMeshes();
   renderRoleCard();
   renderPlayerList();
-  resolveNight._done = false;
   showBanner(`Rolün: ${ROLE_INFO[getPlayer(humanId).role].label}`, 4000);
-  setTimeout(()=>{
-    document.getElementById('action-panel').classList.remove('hidden');
-    startNight();
-  }, 1200);
+  setTimeout(()=>{ startNight(); }, 1200);
 }
 
-document.getElementById('start-btn').addEventListener('click', ()=>{
+document.getElementById('btn-local').addEventListener('click', ()=>{
+  initAudio();
   document.getElementById('overlay').classList.add('hidden');
   resetAndStart();
+});
+
+/* ============ ONLINE MULTIPLAYER ============ */
+document.getElementById('btn-online').addEventListener('click', ()=>{
+  initAudio();
+  document.getElementById('screen-menu').style.display='none';
+  document.getElementById('screen-online').style.display='block';
+  document.getElementById('server-url').value = localStorage.getItem('gk_server')||'';
+  document.getElementById('player-name').value = localStorage.getItem('gk_name')||'';
+});
+document.getElementById('btn-back-menu').addEventListener('click', ()=>{
+  document.getElementById('screen-online').style.display='none';
+  document.getElementById('screen-menu').style.display='block';
+});
+
+function connectSocket(){
+  const url = document.getElementById('server-url').value.trim().replace(/\/$/,'');
+  if(!url){ document.getElementById('online-status').textContent = 'Sunucu adresi girin.'; return null; }
+  localStorage.setItem('gk_server', url);
+  if(socket) socket.disconnect();
+  socket = io(url, { transports:['websocket','polling'] });
+  wireSocketEvents();
+  return socket;
+}
+
+function wireSocketEvents(){
+  socket.on('connect_error', ()=>{ document.getElementById('online-status').textContent = 'Sunucuya bağlanılamadı.'; });
+  socket.on('room:error', (msg)=>{ document.getElementById('online-status').textContent = msg; });
+  socket.on('room:update', (state)=>{
+    roomCode = state.code;
+    onlineIdToName = {};
+    state.players.forEach(p=>onlineIdToName[p.id]=p.name);
+    if(document.getElementById('screen-lobby').style.display !== 'none'){
+      document.getElementById('room-code-display').textContent = state.code;
+      const wrap = document.getElementById('lobby-players');
+      wrap.innerHTML = '';
+      state.players.forEach(p=>{
+        const span = document.createElement('span');
+        span.textContent = p.name + (p.id===socket.id?' (sen)':'');
+        wrap.appendChild(span);
+      });
+      const startBtn = document.getElementById('btn-start-online');
+      startBtn.style.display = isHost ? 'inline-block' : 'none';
+    } else if(mode==='online'){
+      players = state.players.map((p,i)=>({
+        id:p.id, name:p.name, alive:p.alive, isHuman:p.id===socket.id,
+        color: PLAYER_COLORS[i%PLAYER_COLORS.length], role: p.id===socket.id ? getPlayer(socket.id)?.role : null
+      }));
+      if(!playerMeshes || Object.keys(playerMeshes).length !== players.length){
+        buildHouses(players.length);
+        buildPlayerMeshes();
+      }
+      renderPlayerList();
+    }
+  });
+  socket.on('role:assign', ({role})=>{
+    humanId = socket.id;
+    const me = players.find(p=>p.id===humanId);
+    if(me) me.role = role;
+    renderRoleCard();
+  });
+  socket.on('phase:change', ({phase:ph, round:r})=>{
+    round = r;
+    if(ph==='NIGHT'){ setDayNight(0); setPhaseUI('GECE'); showBanner('Gece çöktü...'); startOnlineNightUI(); }
+    if(ph==='DAY'){ setDayNight(1); setPhaseUI('GÜNDÜZ'); playBell(); showBanner('Tartışma zamanı!'); document.getElementById('action-panel').classList.add('hidden'); }
+    if(ph==='VOTE'){ setPhaseUI('OYLAMA'); showBanner('Oylama zamanı!'); currentVotes={}; renderPlayerList(); if(isHost) setTimeout(()=>socket.emit('vote:tally'), 20000); }
+    phase = ph;
+  });
+  socket.on('night:result', ({deadName, saved})=>{
+    if(deadName){
+      const v = players.find(p=>p.name===deadName);
+      if(v){ v.alive=false; markPlayerDead(v.id); }
+      playDeath();
+      showBanner(`☠️ ${deadName} bu gece öldürüldü.`, 4000);
+      log(`<span class="sys">${deadName} bu gece öldürüldü.</span>`, true);
+    } else if(saved){
+      showBanner('🩹 Bir saldırı oldu ama kurban kurtarıldı!', 4000);
+    } else {
+      showBanner('Sakin bir gece geçti.', 3600);
+    }
+    renderPlayerList();
+  });
+  socket.on('sheriff:result', ({name, isMafia})=>{
+    showBanner(`🔎 Araştırma sonucu: ${name} ${isMafia?'BİR KATİL!':'masum görünüyor.'}`, 4500);
+  });
+  socket.on('chat:message', ({name, text})=>{
+    log(`<span class="who">${name}:</span> ${text}`);
+  });
+  socket.on('vote:update', (votes)=>{
+    currentVotes = votes;
+    renderPlayerList();
+  });
+  socket.on('vote:result', ({executedName})=>{
+    if(executedName){
+      const v = players.find(p=>p.name===executedName);
+      if(v){ v.alive=false; markPlayerDead(v.id); }
+      playDeath();
+      showBanner(`⚖️ ${executedName} asıldı.`, 4200);
+      log(`<span class="sys">${executedName} halk tarafından asıldı.</span>`, true);
+    } else {
+      showBanner('Oylar dağıldı, kimse asılmadı.', 3800);
+    }
+    renderPlayerList();
+  });
+  socket.on('game:end', ({winner, message})=>{
+    endGame(winner, message);
+  });
+}
+
+function startOnlineNightUI(){
+  const panel = document.getElementById('action-panel');
+  const me = getPlayer(humanId);
+  const targets = document.getElementById('action-targets');
+  const title = document.getElementById('action-title');
+  const confirm = document.getElementById('confirm-btn');
+  targets.innerHTML = ''; selectedTarget = null; confirm.disabled = true;
+  if(!me || !me.alive){ panel.classList.add('hidden'); return; }
+  panel.classList.remove('hidden');
+  confirm.style.display='inline-block';
+  let pool = [];
+  if(me.role==='MAFIA'){ title.textContent='Kimi öldüreceksiniz?'; pool = alivePlayers().filter(p=>p.id!==me.id); }
+  else if(me.role==='DOCTOR'){ title.textContent='Kimi koruyacaksın?'; pool = alivePlayers(); }
+  else if(me.role==='SHERIFF'){ title.textContent='Kimi araştıracaksın?'; pool = alivePlayers().filter(p=>p.id!==me.id); }
+  else { title.textContent='Uyuyorsun... (bu rol online modda henüz basit çalışıyor)'; pool=[]; }
+  if(pool.length===0){ confirm.disabled=false; confirm.textContent='Devam Et'; }
+  else{
+    confirm.textContent='Onayla';
+    pool.forEach(p=>{
+      const btn=document.createElement('button');
+      btn.textContent=p.name;
+      btn.onclick=()=>{ [...targets.children].forEach(b=>b.classList.remove('selected')); btn.classList.add('selected'); selectedTarget=p.id; confirm.disabled=false; playClick(); };
+      targets.appendChild(btn);
+    });
+  }
+  confirm.onclick = ()=>{
+    playClick();
+    socket.emit('night:action', { targetId: selectedTarget });
+    panel.classList.add('hidden');
+    if(isHost) setTimeout(()=>socket.emit('night:resolve'), 3000);
+  };
+}
+
+document.getElementById('btn-create-room').addEventListener('click', ()=>{
+  const name = document.getElementById('player-name').value.trim() || 'Oyuncu';
+  localStorage.setItem('gk_name', name);
+  const s = connectSocket();
+  if(!s) return;
+  s.on('connect', ()=>{ s.emit('room:create', { name }); isHost = true; showLobby(); });
+});
+document.getElementById('btn-join-room').addEventListener('click', ()=>{
+  const name = document.getElementById('player-name').value.trim() || 'Oyuncu';
+  const code = document.getElementById('room-code-input').value.trim().toUpperCase();
+  if(!code){ document.getElementById('online-status').textContent = 'Oda kodu girin.'; return; }
+  localStorage.setItem('gk_name', name);
+  const s = connectSocket();
+  if(!s) return;
+  s.on('connect', ()=>{ s.emit('room:join', { code, name }); isHost = false; showLobby(); });
+});
+function showLobby(){
+  document.getElementById('screen-online').style.display='none';
+  document.getElementById('screen-lobby').style.display='block';
+}
+document.getElementById('btn-start-online').addEventListener('click', ()=>{
+  socket.emit('room:start');
+  mode = 'online';
+  humanId = socket.id;
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('chat-log').innerHTML = '';
+  players = [{ id:socket.id, name: localStorage.getItem('gk_name')||'Sen', alive:true, isHuman:true, color:PLAYER_COLORS[0], role:null }];
+  buildHouses(9);
+  buildPlayerMeshes();
 });
 
 initScene();
