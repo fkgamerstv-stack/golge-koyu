@@ -1,1 +1,889 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gölge Köyü</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  :root{
+    --night:#05070c;
+    --panel:rgba(13,16,23,0.88);
+    --panel-border:rgba(201,214,227,0.14);
+    --ink:#d9e2ec;
+    --muted:#7d8ba0;
+    --amber:#d99a3d;
+    --blood:#8b3145;
+    --teal:#3f7a72;
+    --font-display:'Cinzel',serif;
+    --font-body:'Inter',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;width:100%;height:100%;background:var(--night);overflow:hidden;font-family:var(--font-body);color:var(--ink);}
+  #canvas-wrap{position:fixed;inset:0;}
+  canvas{display:block;}
 
+  .hud{position:fixed;pointer-events:none;z-index:10;}
+  .hud *{pointer-events:auto;}
+
+  /* Top center dial */
+  #dial{
+    top:16px;left:50%;transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+  }
+  #dial .ring{
+    width:74px;height:74px;border-radius:50%;
+    background:var(--panel);border:1px solid var(--panel-border);
+    display:flex;align-items:center;justify-content:center;
+    font-size:28px;box-shadow:0 4px 20px rgba(0,0,0,0.5);
+    transition:background 0.6s ease;
+  }
+  #dial .phase-label{
+    font-family:var(--font-display);letter-spacing:2px;font-size:12px;
+    text-transform:uppercase;color:var(--amber);background:var(--panel);
+    border:1px solid var(--panel-border);padding:4px 14px;border-radius:20px;
+  }
+  #dial .round-label{font-size:11px;color:var(--muted);}
+
+  /* Role card top-left */
+  #role-card{
+    top:16px;left:16px;width:210px;
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    padding:14px;backdrop-filter:blur(6px);
+  }
+  #role-card .r-title{font-family:var(--font-display);font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;}
+  #role-card .r-name{font-family:var(--font-display);font-size:20px;font-weight:700;margin-bottom:6px;}
+  #role-card .r-desc{font-size:12px;color:var(--muted);line-height:1.5;}
+  #role-card.mafia .r-name{color:var(--blood);}
+  #role-card.doctor .r-name{color:var(--teal);}
+  #role-card.sheriff .r-name{color:var(--amber);}
+  #role-card.villager .r-name{color:var(--ink);}
+
+  /* Player list right */
+  #player-list{
+    top:16px;right:16px;width:220px;
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    padding:12px;max-height:70vh;overflow-y:auto;
+  }
+  #player-list h3{font-family:var(--font-display);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:0 0 10px 0;}
+  .player-row{
+    display:flex;align-items:center;gap:8px;padding:6px 6px;border-radius:6px;font-size:13px;margin-bottom:2px;
+  }
+  .player-row.dead{opacity:0.35;text-decoration:line-through;}
+  .player-row .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .player-row .pname{flex:1;}
+  .player-row .vote-btn{
+    font-size:11px;background:var(--blood);color:#fff;border:none;border-radius:5px;
+    padding:3px 8px;cursor:pointer;font-family:var(--font-body);font-weight:600;
+  }
+  .player-row .vote-btn:hover{background:#a8425c;}
+  .player-row .vote-count{font-size:11px;color:var(--amber);min-width:14px;text-align:right;}
+  .player-row.you{border:1px solid var(--panel-border);}
+
+  /* Chat log bottom left */
+  #chat-panel{
+    bottom:16px;left:16px;width:340px;height:220px;
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  #chat-log{flex:1;overflow-y:auto;padding:10px;font-size:12.5px;line-height:1.5;}
+  #chat-log .line{margin-bottom:6px;}
+  #chat-log .who{font-weight:700;}
+  #chat-log .sys{color:var(--amber);font-style:italic;}
+  #chat-form{display:flex;border-top:1px solid var(--panel-border);}
+  #chat-input{flex:1;background:transparent;border:none;color:var(--ink);padding:8px 10px;font-size:12.5px;font-family:var(--font-body);outline:none;}
+  #chat-form button{background:none;border:none;color:var(--amber);padding:0 12px;cursor:pointer;font-size:16px;}
+
+  /* Center banner */
+  #banner{
+    top:110px;left:50%;transform:translateX(-50%);
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    padding:12px 26px;font-family:var(--font-display);font-size:16px;letter-spacing:1px;
+    text-align:center;max-width:520px;opacity:0;transition:opacity 0.5s ease;
+  }
+  #banner.show{opacity:1;}
+
+  /* Action panel bottom center */
+  #action-panel{
+    bottom:16px;left:50%;transform:translateX(-50%);
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    padding:14px 18px;min-width:320px;max-width:520px;text-align:center;
+  }
+  #action-panel h4{margin:0 0 10px 0;font-family:var(--font-display);font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--amber);}
+  #action-targets{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:10px;}
+  #action-targets button{
+    background:rgba(255,255,255,0.06);border:1px solid var(--panel-border);color:var(--ink);
+    padding:6px 12px;border-radius:6px;cursor:pointer;font-family:var(--font-body);font-size:12.5px;
+  }
+  #action-targets button.selected{background:var(--amber);color:#1a1204;border-color:var(--amber);font-weight:700;}
+  #action-targets button:disabled{opacity:0.3;cursor:not-allowed;}
+  #confirm-btn{
+    background:var(--blood);color:#fff;border:none;padding:8px 22px;border-radius:6px;
+    cursor:pointer;font-family:var(--font-body);font-weight:700;font-size:13px;letter-spacing:0.5px;
+  }
+  #confirm-btn:disabled{opacity:0.4;cursor:not-allowed;}
+  #action-panel.hidden{display:none;}
+
+  /* Timer bar */
+  #timer-bar-wrap{position:fixed;top:0;left:0;width:100%;height:3px;background:rgba(255,255,255,0.05);z-index:11;}
+  #timer-bar{height:100%;background:var(--amber);width:0%;transition:width 1s linear;}
+
+  /* Intro / end overlay */
+  #overlay{
+    position:fixed;inset:0;background:rgba(3,4,7,0.92);z-index:30;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:20px;
+  }
+  #overlay h1{font-family:var(--font-display);font-size:46px;letter-spacing:4px;margin:0 0 6px 0;color:var(--ink);text-shadow:0 0 30px rgba(217,154,61,0.35);}
+  #overlay .sub{color:var(--muted);font-size:14px;margin-bottom:26px;letter-spacing:1px;}
+  #overlay p.desc{max-width:480px;color:var(--muted);font-size:13.5px;line-height:1.7;margin-bottom:26px;}
+  #overlay button{
+    background:var(--blood);color:#fff;border:none;padding:14px 36px;border-radius:8px;
+    font-family:var(--font-display);font-size:15px;letter-spacing:2px;cursor:pointer;text-transform:uppercase;
+  }
+  #overlay button:hover{background:#a8425c;}
+  #overlay.hidden{display:none;}
+  #overlay .roles-legend{display:flex;gap:18px;margin-bottom:28px;flex-wrap:wrap;justify-content:center;max-width:560px;}
+  #overlay .roles-legend div{font-size:12px;color:var(--muted);}
+  #overlay .roles-legend b{display:block;font-family:var(--font-display);font-size:13px;margin-bottom:2px;}
+  .legend-mafia b{color:var(--blood);}
+  .legend-doctor b{color:var(--teal);}
+  .legend-sheriff b{color:var(--amber);}
+  .legend-villager b{color:var(--ink);}
+
+  ::-webkit-scrollbar{width:6px;}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+<div id="timer-bar-wrap"><div id="timer-bar"></div></div>
+
+<div class="hud" id="dial">
+  <div class="ring" id="dial-icon">🌙</div>
+  <div class="phase-label" id="phase-label">GECE</div>
+  <div class="round-label" id="round-label">Tur 1</div>
+</div>
+
+<div class="hud" id="role-card">
+  <div class="r-title">Rolün</div>
+  <div class="r-name" id="role-name">—</div>
+  <div class="r-desc" id="role-desc">Roller dağıtılıyor...</div>
+</div>
+
+<div class="hud" id="player-list">
+  <h3>Köylüler</h3>
+  <div id="player-rows"></div>
+</div>
+
+<div class="hud" id="banner"></div>
+
+<div class="hud" id="chat-panel">
+  <div id="chat-log"></div>
+  <form id="chat-form">
+    <input id="chat-input" type="text" placeholder="Bir şey söyle..." autocomplete="off">
+    <button type="submit">➤</button>
+  </form>
+</div>
+
+<div class="hud" id="action-panel">
+  <h4 id="action-title">Bekleniyor...</h4>
+  <div id="action-targets"></div>
+  <button id="confirm-btn" disabled>Onayla</button>
+</div>
+
+<div id="overlay">
+  <h1>GÖLGE KÖYÜ</h1>
+  <div class="sub">bir sosyal çıkarım oyunu</div>
+  <p class="desc">Köyün arasına gizlenmiş katiller var. Gündüzleri tartışıp oy verin, geceleri gerçek rolünüzü kullanın. Köy mü katilleri temizleyecek, yoksa karanlık mı köyü ele geçirecek?</p>
+  <div class="roles-legend">
+    <div class="legend-mafia"><b>Katil</b>Geceleri bir kurban seçer</div>
+    <div class="legend-doctor"><b>Doktor</b>Geceleri birini korur</div>
+    <div class="legend-sheriff"><b>Dedektif</b>Geceleri birini araştırır</div>
+    <div class="legend-villager"><b>Vatandaş</b>Sadece oyuyla köyü korur</div>
+  </div>
+  <button id="start-btn">Oyuna Başla</button>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============ GAME DATA ============ */
+const BOT_NAMES = ['Ahmet','Ayşe','Can','Deniz','Elif','Kerem','Zeynep','Burak'];
+const PLAYER_COLORS = [0xd99a3d,0x6fa8dc,0x93c47d,0xe06666,0xb4a7d6,0xf6b26b,0x76a5af,0xffe599];
+const ROLE_INFO = {
+  MAFIA:   { label:'Katil',     desc:'Geceleri müttefiklerinle birlikte bir kurban seçersin. Kimliğini gizli tut.', cls:'mafia' },
+  DOCTOR:  { label:'Doktor',    desc:'Her gece bir kişiyi (kendin dahil) koruyabilirsin. Katilin hedefini kurtarabilirsin.', cls:'doctor' },
+  SHERIFF: { label:'Dedektif',  desc:'Her gece bir kişiyi araştırıp katil olup olmadığını öğrenirsin.', cls:'sheriff' },
+  VILLAGER:{ label:'Vatandaş',  desc:'Özel bir yeteneğin yok. Gündüz tartışıp doğru kişiyi asmaya çalış.', cls:'villager' }
+};
+const SUSPECT_LINES = [
+  "{a} bence çok sessiz kalıyor, şüpheliyim.",
+  "{a} dün gece {b}'yi savunmuştu, tuhaf.",
+  "Bence katil {a} olabilir, davranışları garip.",
+  "{a}'e güveniyorum, oyunu iyi oynuyor.",
+  "{a} neden bu kadar hızlı oy verdi ki?",
+  "Bir şey saklıyor gibisin {a}.",
+  "{a} ile {b} birbirini kolluyor gibi geldi bana.",
+  "Ben masumum, lütfen bana oy vermeyin.",
+  "{a} dedektif olabilir mi dersiniz?",
+  "Dün gece {a} evinin dışında görülmüş olabilir.",
+  "Kanıt yok ama içime doğuyor: {a}.",
+  "{a} çok fazla konuşuyor, dikkat çekmeye çalışıyor sanki."
+];
+const DEFEND_LINES = [
+  "Ben katil değilim, yemin ederim.",
+  "Bana oy vermeden önce iyi düşünün.",
+  "{a} bence yanlış kişiyi işaret ediyor.",
+  "Panik yapmayalım, kanıtsız oy vermeyelim.",
+  "Bence bu gece kimseyi asmamalıyız."
+];
+
+let scene, camera, renderer, controls, clock;
+let houseGroup, playerMeshes = {}, moonLight, sunLight, ambientLight, skyColor;
+let dayNightT = 0; // 0 = night, 1 = day
+let players = [];
+let humanId = 'you';
+let round = 1;
+let phase = 'INTRO';
+let nightAction = { mafiaTarget:null, doctorTarget:null, sheriffTarget:null, mafiaVotes:{} };
+let currentVotes = {};
+let selectedTarget = null;
+let sheriffResults = [];
+let timerInterval = null;
+
+/* ============ THREE.JS SCENE ============ */
+function initScene(){
+  scene = new THREE.Scene();
+  clock = new THREE.Clock();
+  skyColor = { night:new THREE.Color(0x05070c), day:new THREE.Color(0x5c7d9e) };
+  scene.background = skyColor.night.clone();
+  scene.fog = new THREE.Fog(0x05070c, 18, 55);
+
+  camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 200);
+  camera.position.set(0, 13, 20);
+
+  renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  document.getElementById('canvas-wrap').appendChild(renderer.domElement);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.minDistance = 8;
+  controls.maxDistance = 34;
+  controls.maxPolarAngle = Math.PI/2.15;
+  controls.target.set(0,1,0);
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.4;
+
+  ambientLight = new THREE.AmbientLight(0x223047, 0.9);
+  scene.add(ambientLight);
+
+  moonLight = new THREE.DirectionalLight(0x8fa8d9, 0.5);
+  moonLight.position.set(-10, 18, -8);
+  scene.add(moonLight);
+
+  sunLight = new THREE.DirectionalLight(0xffdca8, 0.0);
+  sunLight.position.set(14, 20, 10);
+  sunLight.castShadow = true;
+  scene.add(sunLight);
+
+  // ground
+  const groundGeo = new THREE.CircleGeometry(20, 48);
+  const groundMat = new THREE.MeshStandardMaterial({ color:0x2b3a2c, roughness:1 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI/2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // village square ring
+  const ringGeo = new THREE.RingGeometry(4.6, 5, 40);
+  const ringMat = new THREE.MeshStandardMaterial({ color:0x4a4030, roughness:1, side:THREE.DoubleSide });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI/2;
+  ring.position.y = 0.01;
+  scene.add(ring);
+
+  // center gallows
+  buildGallows();
+
+  houseGroup = new THREE.Group();
+  scene.add(houseGroup);
+
+  window.addEventListener('resize', onResize);
+  animate();
+}
+
+function buildGallows(){
+  const g = new THREE.Group();
+  const woodMat = new THREE.MeshStandardMaterial({ color:0x3b2a1e, roughness:0.9 });
+  const postGeo = new THREE.CylinderGeometry(0.12,0.12,3.2,8);
+  const p1 = new THREE.Mesh(postGeo, woodMat); p1.position.set(-1,1.6,0); p1.castShadow=true;
+  const p2 = new THREE.Mesh(postGeo, woodMat); p2.position.set(1,1.6,0); p2.castShadow=true;
+  const beamGeo = new THREE.CylinderGeometry(0.1,0.1,2.4,8);
+  const beam = new THREE.Mesh(beamGeo, woodMat);
+  beam.rotation.z = Math.PI/2; beam.position.set(0,3.1,0); beam.castShadow=true;
+  g.add(p1,p2,beam);
+  scene.add(g);
+
+  // torches around ring
+  for(let i=0;i<6;i++){
+    const a = (i/6)*Math.PI*2;
+    const tx = Math.cos(a)*5.4, tz = Math.sin(a)*5.4;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.4,6), woodMat);
+    pole.position.set(tx,0.7,tz); pole.castShadow = true;
+    scene.add(pole);
+    const flame = new THREE.PointLight(0xff9a3d, 1.4, 5, 2);
+    flame.position.set(tx, 1.5, tz);
+    scene.add(flame);
+    const flameMesh = new THREE.Mesh(new THREE.SphereGeometry(0.09,6,6), new THREE.MeshBasicMaterial({color:0xffb86b}));
+    flameMesh.position.copy(flame.position);
+    scene.add(flameMesh);
+    flame.userData.flicker = Math.random()*10;
+    torchLights.push(flame);
+  }
+}
+const torchLights = [];
+
+function buildHouses(n){
+  houseGroup.clear();
+  const roofColors = [0x7a4a3a,0x5a4a6a,0x4a5a4a,0x6a4a4a,0x4a4a6a,0x5a5a3a,0x6a5a4a,0x4a5a6a];
+  for(let i=0;i<n;i++){
+    const a = (i/n)*Math.PI*2;
+    const r = 9.5;
+    const hx = Math.cos(a)*r, hz = Math.sin(a)*r;
+    const h = new THREE.Group();
+    const wallMat = new THREE.MeshStandardMaterial({ color:0x8a7c68, roughness:0.95 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: roofColors[i%roofColors.length], roughness:0.85 });
+    const w = 1.6 + Math.random()*0.4, hgt = 1.4 + Math.random()*0.5, d = 1.6;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w,hgt,d), wallMat);
+    body.position.y = hgt/2; body.castShadow = true; body.receiveShadow = true;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(w*0.85,1.1,4), roofMat);
+    roof.position.y = hgt + 0.55; roof.rotation.y = Math.PI/4; roof.castShadow = true;
+    h.add(body, roof);
+    h.position.set(hx, 0, hz);
+    h.lookAt(0,0,0);
+    houseGroup.add(h);
+  }
+}
+
+function buildPlayerMeshes(){
+  Object.values(playerMeshes).forEach(m=>scene.remove(m.group));
+  playerMeshes = {};
+  const n = players.length;
+  players.forEach((p, i)=>{
+    const a = (i/n)*Math.PI*2;
+    const r = 6.6;
+    const px = Math.cos(a)*r, pz = Math.sin(a)*r;
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color:p.color, roughness:0.6 });
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.32,0.6,4,8), mat);
+    body.position.y = 0.62; body.castShadow = true;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22,10,10), new THREE.MeshStandardMaterial({color:0xe8c9a0}));
+    head.position.y = 1.15; head.castShadow = true;
+    g.add(body, head);
+    g.position.set(px,0,pz);
+    g.lookAt(0,0.6,0);
+    const lantern = new THREE.PointLight(0xffcf8a, 0.6, 2.6, 2);
+    lantern.position.set(0,1,0.3);
+    g.add(lantern);
+    scene.add(g);
+    playerMeshes[p.id] = { group:g, body, head, lantern, baseY:0 };
+  });
+}
+
+function markPlayerDead(id){
+  const m = playerMeshes[id];
+  if(!m) return;
+  m.group.rotation.x = Math.PI/2.1;
+  m.group.position.y = -0.15;
+  m.lantern.intensity = 0;
+  m.body.material.color.multiplyScalar(0.4);
+  m.head.material.color.multiplyScalar(0.4);
+}
+
+function onResize(){
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function setDayNight(target, duration=2.5){
+  const start = dayNightT;
+  const startTime = performance.now();
+  function step(){
+    const t = Math.min(1,(performance.now()-startTime)/(duration*1000));
+    dayNightT = start + (target-start)*t;
+    applyDayNight();
+    if(t<1) requestAnimationFrame(step);
+  }
+  step();
+}
+
+function applyDayNight(){
+  scene.background = skyColor.night.clone().lerp(skyColor.day, dayNightT);
+  scene.fog.color = scene.background;
+  ambientLight.intensity = 0.5 + dayNightT*0.8;
+  moonLight.intensity = 0.5*(1-dayNightT);
+  sunLight.intensity = 0.9*dayNightT;
+  document.getElementById('dial-icon').textContent = dayNightT > 0.5 ? '☀️' : '🌙';
+  document.getElementById('dial-icon').style.background = dayNightT>0.5 ? 'rgba(255,220,150,0.15)' : 'rgba(120,150,220,0.1)';
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  torchLights.forEach(l=>{
+    l.intensity = 1.2 + Math.sin(t*8 + l.userData.flicker)*0.25 + Math.random()*0.08;
+  });
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+/* ============ GAME LOGIC ============ */
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+function setupPlayers(){
+  players = [];
+  players.push({ id:humanId, name:'Sen', isHuman:true, alive:true, color:PLAYER_COLORS[0], role:null });
+  const names = shuffle(BOT_NAMES).slice(0,6);
+  names.forEach((name,i)=>{
+    players.push({ id:'bot_'+i, name, isHuman:false, alive:true, color:PLAYER_COLORS[i+1], role:null });
+  });
+  const roles = ['MAFIA','MAFIA','DOCTOR','SHERIFF','VILLAGER','VILLAGER','VILLAGER'];
+  const shuffledRoles = shuffle(roles);
+  players.forEach((p,i)=>{ p.role = shuffledRoles[i]; });
+}
+
+function alivePlayers(){ return players.filter(p=>p.alive); }
+function mafiaAlive(){ return alivePlayers().filter(p=>p.role==='MAFIA'); }
+function townAlive(){ return alivePlayers().filter(p=>p.role!=='MAFIA'); }
+function getPlayer(id){ return players.find(p=>p.id===id); }
+
+function renderRoleCard(){
+  const me = getPlayer(humanId);
+  const info = ROLE_INFO[me.role];
+  const card = document.getElementById('role-card');
+  card.className = info.cls;
+  document.getElementById('role-name').textContent = info.label;
+  document.getElementById('role-desc').textContent = info.desc;
+}
+
+function renderPlayerList(){
+  const wrap = document.getElementById('player-rows');
+  wrap.innerHTML = '';
+  players.forEach(p=>{
+    const row = document.createElement('div');
+    row.className = 'player-row' + (p.alive?'':' dead') + (p.id===humanId?' you':'');
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    dot.style.background = '#'+p.color.toString(16).padStart(6,'0');
+    const name = document.createElement('div');
+    name.className = 'pname';
+    name.textContent = p.name + (p.id===humanId?' (sen)':'');
+    row.appendChild(dot); row.appendChild(name);
+    if(phase==='VOTE' && p.alive && p.id!==humanId){
+      const btn = document.createElement('button');
+      btn.className = 'vote-btn';
+      btn.textContent = 'Oy Ver';
+      btn.disabled = !!currentVotes[humanId];
+      btn.onclick = ()=> castHumanVote(p.id);
+      row.appendChild(btn);
+    }
+    if(phase==='VOTE' && p.alive){
+      const vc = document.createElement('div');
+      vc.className = 'vote-count';
+      const count = Object.values(currentVotes).filter(v=>v===p.id).length;
+      vc.textContent = count>0 ? count : '';
+      row.appendChild(vc);
+    }
+    wrap.appendChild(row);
+  });
+}
+
+function log(html, sys=false){
+  const el = document.getElementById('chat-log');
+  const line = document.createElement('div');
+  line.className = 'line' + (sys?' sys':'');
+  line.innerHTML = html;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function say(playerId, text){
+  const p = getPlayer(playerId);
+  const color = '#'+p.color.toString(16).padStart(6,'0');
+  log(`<span class="who" style="color:${color}">${p.name}:</span> ${text}`);
+}
+
+function showBanner(text, ms=3200){
+  const b = document.getElementById('banner');
+  b.textContent = text;
+  b.classList.add('show');
+  clearTimeout(showBanner._t);
+  showBanner._t = setTimeout(()=>b.classList.remove('show'), ms);
+}
+
+function setPhaseUI(label){
+  document.getElementById('phase-label').textContent = label;
+  document.getElementById('round-label').textContent = 'Tur ' + round;
+}
+
+function startTimer(seconds, onDone){
+  clearInterval(timerInterval);
+  const bar = document.getElementById('timer-bar');
+  bar.style.transition = 'none';
+  bar.style.width = '100%';
+  requestAnimationFrame(()=>{
+    bar.style.transition = `width ${seconds}s linear`;
+    bar.style.width = '0%';
+  });
+  timerInterval = setTimeout(()=>{ onDone(); }, seconds*1000);
+}
+
+/* ---------- NIGHT PHASE ---------- */
+function startNight(){
+  phase = 'NIGHT';
+  setDayNight(0);
+  setPhaseUI('GECE');
+  nightAction = { mafiaTarget:null, doctorTarget:null, sheriffTarget:null };
+  renderPlayerList();
+  showBanner('Gece çöktü. Köy uykuya daldı...');
+  const me = getPlayer(humanId);
+  const panel = document.getElementById('action-panel');
+  const targets = document.getElementById('action-targets');
+  const title = document.getElementById('action-title');
+  const confirm = document.getElementById('confirm-btn');
+  targets.innerHTML = '';
+  selectedTarget = null;
+  confirm.disabled = true;
+
+  if(!me.alive){
+    title.textContent = 'Öldün. İzliyorsun...';
+    confirm.style.display='none';
+    startTimer(6, resolveNight);
+    return;
+  }
+  confirm.style.display='inline-block';
+
+  let pool = [];
+  if(me.role==='MAFIA'){ title.textContent='Kimi öldüreceksiniz?'; pool = alivePlayers().filter(p=>p.role!=='MAFIA'); }
+  else if(me.role==='DOCTOR'){ title.textContent='Kimi koruyacaksın?'; pool = alivePlayers(); }
+  else if(me.role==='SHERIFF'){ title.textContent='Kimi araştıracaksın?'; pool = alivePlayers().filter(p=>p.id!==humanId); }
+  else { title.textContent='Uyuyorsun... rolün yok.'; }
+
+  if(pool.length===0){
+    confirm.disabled = false;
+    confirm.textContent = 'Devam Et';
+  } else {
+    confirm.textContent = 'Onayla';
+    pool.forEach(p=>{
+      const btn = document.createElement('button');
+      btn.textContent = p.name;
+      btn.onclick = ()=>{
+        [...targets.children].forEach(b=>b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedTarget = p.id;
+        confirm.disabled = false;
+      };
+      targets.appendChild(btn);
+    });
+  }
+
+  confirm.onclick = ()=>{
+    if(me.role==='MAFIA') nightAction.mafiaTarget = selectedTarget;
+    if(me.role==='DOCTOR') nightAction.doctorTarget = selectedTarget;
+    if(me.role==='SHERIFF') nightAction.sheriffTarget = selectedTarget;
+    confirm.disabled = true;
+    resolveNight();
+  };
+
+  startTimer(20, ()=>{ if(confirm.style.display!=='none' && !confirm.disabled===false) {} resolveNight(); });
+}
+
+function resolveNight(){
+  if(resolveNight._done) return;
+  resolveNight._done = true;
+  clearInterval(timerInterval); clearTimeout(timerInterval);
+  document.getElementById('action-panel').classList.add('hidden');
+
+  // bots act
+  const mafiaBots = alivePlayers().filter(p=>p.role==='MAFIA' && !p.isHuman);
+  const doctorBot = alivePlayers().find(p=>p.role==='DOCTOR' && !p.isHuman);
+  const sheriffBot = alivePlayers().find(p=>p.role==='SHERIFF' && !p.isHuman);
+
+  if(!nightAction.mafiaTarget){
+    const targets = alivePlayers().filter(p=>p.role!=='MAFIA');
+    if(targets.length) nightAction.mafiaTarget = shuffle(targets)[0].id;
+  } else if(mafiaBots.length){
+    // human is mafia; bots agree with human's target automatically (simplified coordination)
+  }
+  if(mafiaBots.length && !getPlayer(humanId).alive===false && getPlayer(humanId).role!=='MAFIA'){
+    // no human mafia input already set target above if needed
+  }
+  if(doctorBot){
+    const opts = alivePlayers();
+    nightAction.doctorTarget = nightAction.doctorTarget || shuffle(opts)[0]?.id;
+  }
+  if(sheriffBot){
+    const opts = alivePlayers().filter(p=>p.id!==sheriffBot.id);
+    const target = shuffle(opts)[0];
+    if(target){
+      sheriffResults.push({round, name:target.name, isMafia:target.role==='MAFIA'});
+    }
+  }
+  const me = getPlayer(humanId);
+  if(me.alive && me.role==='SHERIFF' && nightAction.sheriffTarget){
+    const t = getPlayer(nightAction.sheriffTarget);
+    sheriffResults.push({round, name:t.name, isMafia:t.role==='MAFIA'});
+  }
+
+  round += 1<0?0:0; // noop guard
+  setTimeout(()=>revealMorning(), 800);
+}
+
+function revealMorning(){
+  phase = 'REVEAL';
+  setDayNight(1);
+  setPhaseUI('SABAH');
+  const victimId = nightAction.mafiaTarget;
+  const saved = victimId && nightAction.doctorTarget===victimId;
+  document.getElementById('action-panel').classList.add('hidden');
+
+  let msg = '';
+  if(victimId && !saved){
+    const v = getPlayer(victimId);
+    v.alive = false;
+    markPlayerDead(v.id);
+    msg = `☠️ ${v.name} bu gece öldürüldü. (${ROLE_INFO[v.role].label})`;
+    log(`<span class="sys">${v.name} bu gece öldürüldü. Rolü: ${ROLE_INFO[v.role].label}</span>`, true);
+  } else if(victimId && saved){
+    msg = `🩹 Bu gece birine saldırıldı ama doktor onu kurtardı!`;
+    log(`<span class="sys">Bu gece bir saldırı oldu ama kurban kurtarıldı!</span>`, true);
+  } else {
+    msg = 'Sakin bir gece geçti, kimse ölmedi.';
+    log(`<span class="sys">Sakin bir gece geçti.</span>`, true);
+  }
+  showBanner(msg, 4000);
+
+  const me = getPlayer(humanId);
+  if(me.role==='SHERIFF' && me.alive){
+    const res = sheriffResults.filter(r=>r.round===round).pop();
+    if(res){
+      setTimeout(()=>{
+        showBanner(`🔎 Araştırma sonucu: ${res.name} ${res.isMafia?'BİR KATİL!':'masum görünüyor.'}`, 4500);
+      }, 4200);
+    }
+  }
+  renderPlayerList();
+
+  if(checkWin()) return;
+  setTimeout(()=>startDay(), 4600);
+}
+
+/* ---------- DAY / VOTE PHASE ---------- */
+function startDay(){
+  phase = 'DAY';
+  setPhaseUI('GÜNDÜZ');
+  showBanner('Tartışma zamanı. Kim şüpheli?');
+  renderPlayerList();
+  document.getElementById('action-panel').classList.add('hidden');
+
+  const speakers = shuffle(alivePlayers().filter(p=>!p.isHuman));
+  let delay = 800;
+  speakers.forEach(sp=>{
+    setTimeout(()=>{
+      const others = alivePlayers().filter(p=>p.id!==sp.id);
+      if(others.length===0) return;
+      const a = shuffle(others)[0].name;
+      const b = shuffle(others)[0].name;
+      const useDefend = Math.random()<0.25;
+      const line = (useDefend?shuffle(DEFEND_LINES):shuffle(SUSPECT_LINES))[0]
+        .replace('{a}', a).replace('{b}', b);
+      say(sp.id, line);
+    }, delay);
+    delay += 1500 + Math.random()*900;
+  });
+
+  startTimer(Math.max(delay/1000 + 2, 14), startVote);
+}
+
+function castHumanVote(targetId){
+  if(currentVotes[humanId]) return;
+  currentVotes[humanId] = targetId;
+  say(humanId, `oy: ${getPlayer(targetId).name}`);
+  renderPlayerList();
+  checkVotesComplete();
+}
+
+function startVote(){
+  phase = 'VOTE';
+  setPhaseUI('OYLAMA');
+  showBanner('Oylama zamanı! Şüphelini seç.');
+  currentVotes = {};
+  clearTimeout(timerInterval); clearInterval(timerInterval);
+  renderPlayerList();
+
+  const bots = alivePlayers().filter(p=>!p.isHuman);
+  bots.forEach((b,i)=>{
+    setTimeout(()=>{
+      if(!getPlayer(b.id).alive) return;
+      const opts = alivePlayers().filter(p=>p.id!==b.id);
+      let target;
+      if(b.role==='MAFIA'){
+        const nonMafia = opts.filter(p=>p.role!=='MAFIA');
+        target = shuffle(nonMafia.length?nonMafia:opts)[0];
+      } else {
+        const suspectResult = sheriffResults.find(r=>{
+          const rp = players.find(pp=>pp.name===r.name);
+          return rp && rp.alive && r.isMafia;
+        });
+        if(b.role==='SHERIFF' && suspectResult){
+          target = players.find(pp=>pp.name===suspectResult.name);
+        } else {
+          target = shuffle(opts)[0];
+        }
+      }
+      if(target){
+        currentVotes[b.id] = target.id;
+        renderPlayerList();
+        checkVotesComplete();
+      }
+    }, 600 + i*900);
+  });
+
+  startTimer(18, tallyVotes);
+}
+
+function checkVotesComplete(){
+  const need = alivePlayers().length;
+  if(Object.keys(currentVotes).length >= need){
+    tallyVotes();
+  }
+}
+
+function tallyVotes(){
+  if(tallyVotes._doneRound === round && phase!=='VOTE') return;
+  if(phase!=='VOTE') return;
+  clearTimeout(timerInterval); clearInterval(timerInterval);
+  phase = 'EXECUTION';
+  const tally = {};
+  Object.values(currentVotes).forEach(id=>{ tally[id]=(tally[id]||0)+1; });
+  let max = 0, top = [];
+  Object.entries(tally).forEach(([id,c])=>{
+    if(c>max){ max=c; top=[id]; } else if(c===max){ top.push(id); }
+  });
+
+  if(top.length!==1 || max===0){
+    showBanner('Oylar dağıldı, kimse asılmadı.', 3800);
+    log(`<span class="sys">Oylar dağıldı, kimse asılmadı.</span>`, true);
+    setTimeout(()=>{ round++; if(!checkWin()) startNight(); }, 4200);
+    return;
+  }
+  const victim = getPlayer(top[0]);
+  victim.alive = false;
+  markPlayerDead(victim.id);
+  const wasMafia = victim.role==='MAFIA';
+  showBanner(`⚖️ ${victim.name} asıldı. Rolü: ${ROLE_INFO[victim.role].label}`, 4200);
+  log(`<span class="sys">${victim.name} halk tarafından asıldı. Rolü: ${ROLE_INFO[victim.role].label}</span>`, true);
+  renderPlayerList();
+
+  setTimeout(()=>{ round++; if(!checkWin()) startNight(); }, 4600);
+}
+
+/* ---------- WIN CHECK ---------- */
+function checkWin(){
+  const m = mafiaAlive().length;
+  const t = townAlive().length;
+  if(m===0){
+    endGame(true, 'Köy kazandı! Tüm katiller bertaraf edildi.');
+    return true;
+  }
+  if(m >= t){
+    endGame(false, 'Katiller kazandı! Köy ele geçirildi.');
+    return true;
+  }
+  return false;
+}
+
+function endGame(townWon, message){
+  phase = 'END';
+  clearTimeout(timerInterval); clearInterval(timerInterval);
+  document.getElementById('action-panel').classList.add('hidden');
+  const overlay = document.getElementById('overlay');
+  overlay.classList.remove('hidden');
+  overlay.innerHTML = `
+    <h1 style="color:${townWon?'var(--teal)':'var(--blood)'}">${townWon?'KÖY KAZANDI':'KATİLLER KAZANDI'}</h1>
+    <p class="desc">${message}<br><br>Senin rolün: <b>${ROLE_INFO[getPlayer(humanId).role].label}</b></p>
+    <button id="restart-btn">Tekrar Oyna</button>
+  `;
+  document.getElementById('restart-btn').onclick = ()=>{ overlay.classList.add('hidden'); resetAndStart(); };
+}
+
+/* ---------- CHAT INPUT ---------- */
+document.getElementById('chat-form').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if(!text) return;
+  say(humanId, text);
+  input.value = '';
+  if(phase==='DAY' && Math.random()<0.6){
+    const alive = alivePlayers().filter(p=>!p.isHuman);
+    if(alive.length){
+      const bot = shuffle(alive)[0];
+      setTimeout(()=>{
+        const others = alivePlayers().filter(p=>p.id!==bot.id);
+        const line = shuffle(SUSPECT_LINES)[0].replace('{a}', shuffle(others)[0]?.name||'birisi').replace('{b}', shuffle(others)[0]?.name||'birisi');
+        say(bot.id, Math.random()<0.4 ? shuffle(DEFEND_LINES)[0].replace('{a}',humanId===bot.id?'':getPlayer(humanId).name) : line);
+      }, 900+Math.random()*1200);
+    }
+  }
+});
+
+/* ---------- INIT / RESTART ---------- */
+function resetAndStart(){
+  round = 1;
+  sheriffResults = [];
+  document.getElementById('chat-log').innerHTML = '';
+  setupPlayers();
+  buildHouses(players.length);
+  buildPlayerMeshes();
+  renderRoleCard();
+  renderPlayerList();
+  resolveNight._done = false;
+  showBanner(`Rolün: ${ROLE_INFO[getPlayer(humanId).role].label}`, 4000);
+  setTimeout(()=>{
+    document.getElementById('action-panel').classList.remove('hidden');
+    startNight();
+  }, 1200);
+}
+
+document.getElementById('start-btn').addEventListener('click', ()=>{
+  document.getElementById('overlay').classList.add('hidden');
+  resetAndStart();
+});
+
+initScene();
+</script>
+</body>
+</html>
