@@ -268,7 +268,7 @@ function initScene(){
   clock = new THREE.Clock();
   skyColor = { night:new THREE.Color(0x05070c), day:new THREE.Color(0x5c7d9e) };
   scene.background = skyColor.night.clone();
-  scene.fog = new THREE.Fog(0x05070c, 18, 55);
+  scene.fog = new THREE.Fog(0x05070c, 24, 70);
 
   camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 200);
   camera.position.set(0, 13, 20);
@@ -277,6 +277,10 @@ function initScene(){
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.35;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   document.getElementById('canvas-wrap').appendChild(renderer.domElement);
 
   controls = new OrbitControls(camera, renderer.domElement);
@@ -288,11 +292,13 @@ function initScene(){
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.4;
 
-  ambientLight = new THREE.AmbientLight(0x223047, 0.9);
+  ambientLight = new THREE.AmbientLight(0x3a4d68, 1.3);
   scene.add(ambientLight);
 
-  moonLight = new THREE.DirectionalLight(0x8fa8d9, 0.5);
+  moonLight = new THREE.DirectionalLight(0xaebfe8, 1.1);
   moonLight.position.set(-10, 18, -8);
+  moonLight.castShadow = true;
+  moonLight.shadow.mapSize.set(1024,1024);
   scene.add(moonLight);
 
   sunLight = new THREE.DirectionalLight(0xffdca8, 0.0);
@@ -300,9 +306,58 @@ function initScene(){
   sunLight.castShadow = true;
   scene.add(sunLight);
 
+  // hemisphere fill light so shadows never go pitch black
+  const hemi = new THREE.HemisphereLight(0x6f86b0, 0x1c2416, 0.6);
+  scene.add(hemi);
+
+  // --- free textures loaded from the three.js example asset library (CC/BSD, bundled with three.js) ---
+  const texLoader = new THREE.TextureLoader();
+  const grassTex = texLoader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
+  grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+  grassTex.repeat.set(10,10);
+  grassTex.colorSpace = THREE.SRGBColorSpace;
+
+  const woodTex = texLoader.load('https://threejs.org/examples/textures/hardwood2_diffuse.jpg');
+  woodTex.wrapS = woodTex.wrapT = THREE.RepeatWrapping;
+  woodTex.repeat.set(2,2);
+  woodTex.colorSpace = THREE.SRGBColorSpace;
+  window.__woodTex = woodTex;
+
+  const moonTex = texLoader.load('https://threejs.org/examples/textures/planets/moon_1024.jpg');
+  moonTex.colorSpace = THREE.SRGBColorSpace;
+
+  // glowing moon sphere in the sky
+  const moonMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(2.2, 24, 24),
+    new THREE.MeshBasicMaterial({ map: moonTex, color: 0xbfd4ff })
+  );
+  moonMesh.position.set(-28, 22, -30);
+  scene.add(moonMesh);
+  const moonGlow = new THREE.PointLight(0x8fb0ff, 0.6, 80, 2);
+  moonGlow.position.copy(moonMesh.position);
+  scene.add(moonGlow);
+
+  // starfield
+  const starTex = texLoader.load('https://threejs.org/examples/textures/sprites/circle.png');
+  const starGeo = new THREE.BufferGeometry();
+  const starCount = 500;
+  const starPos = new Float32Array(starCount*3);
+  for(let i=0;i<starCount;i++){
+    const rad = 45 + Math.random()*40;
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.random()*Math.PI*0.5;
+    starPos[i*3] = Math.cos(theta)*Math.sin(phi)*rad;
+    starPos[i*3+1] = Math.cos(phi)*rad*0.6 + 10;
+    starPos[i*3+2] = Math.sin(theta)*Math.sin(phi)*rad;
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos,3));
+  const starMat = new THREE.PointsMaterial({ size:0.5, map:starTex, color:0xdfe8ff, transparent:true, depthWrite:false });
+  const stars = new THREE.Points(starGeo, starMat);
+  scene.add(stars);
+
   // ground
   const groundGeo = new THREE.CircleGeometry(20, 48);
-  const groundMat = new THREE.MeshStandardMaterial({ color:0x2b3a2c, roughness:1 });
+  const groundMat = new THREE.MeshStandardMaterial({ map:grassTex, color:0x8fa583, roughness:1 });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI/2;
   ground.receiveShadow = true;
@@ -310,11 +365,13 @@ function initScene(){
 
   // village square ring
   const ringGeo = new THREE.RingGeometry(4.6, 5, 40);
-  const ringMat = new THREE.MeshStandardMaterial({ color:0x4a4030, roughness:1, side:THREE.DoubleSide });
+  const ringMat = new THREE.MeshStandardMaterial({ map:woodTex, color:0x9a8a6a, roughness:1, side:THREE.DoubleSide });
   const ring = new THREE.Mesh(ringGeo, ringMat);
   ring.rotation.x = -Math.PI/2;
   ring.position.y = 0.01;
   scene.add(ring);
+
+  buildTrees();
 
   // center gallows
   buildGallows();
@@ -324,6 +381,28 @@ function initScene(){
 
   window.addEventListener('resize', onResize);
   animate();
+}
+
+function buildTrees(){
+  const trunkMat = new THREE.MeshStandardMaterial({ color:0x4a3626, roughness:1 });
+  const leafColors = [0x2f4a2e,0x35502f,0x2a4426];
+  for(let i=0;i<22;i++){
+    const a = Math.random()*Math.PI*2;
+    const r = 13 + Math.random()*6;
+    const tx = Math.cos(a)*r, tz = Math.sin(a)*r;
+    const trunkH = 1.4 + Math.random()*0.8;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.16,trunkH,6), trunkMat);
+    trunk.position.set(tx, trunkH/2, tz);
+    trunk.castShadow = true;
+    scene.add(trunk);
+    const leaf = new THREE.Mesh(
+      new THREE.ConeGeometry(0.9+Math.random()*0.4, 1.8+Math.random()*0.6, 7),
+      new THREE.MeshStandardMaterial({ color: leafColors[i%leafColors.length], roughness:1 })
+    );
+    leaf.position.set(tx, trunkH + 1.0, tz);
+    leaf.castShadow = true;
+    scene.add(leaf);
+  }
 }
 
 function buildGallows(){
@@ -345,7 +424,7 @@ function buildGallows(){
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.4,6), woodMat);
     pole.position.set(tx,0.7,tz); pole.castShadow = true;
     scene.add(pole);
-    const flame = new THREE.PointLight(0xff9a3d, 1.4, 5, 2);
+    const flame = new THREE.PointLight(0xff9a3d, 2.6, 8, 2);
     flame.position.set(tx, 1.5, tz);
     scene.add(flame);
     const flameMesh = new THREE.Mesh(new THREE.SphereGeometry(0.09,6,6), new THREE.MeshBasicMaterial({color:0xffb86b}));
@@ -365,7 +444,7 @@ function buildHouses(n){
     const r = 9.5;
     const hx = Math.cos(a)*r, hz = Math.sin(a)*r;
     const h = new THREE.Group();
-    const wallMat = new THREE.MeshStandardMaterial({ color:0x8a7c68, roughness:0.95 });
+    const wallMat = new THREE.MeshStandardMaterial({ map: window.__woodTex, color:0xb8ab8f, roughness:0.95 });
     const roofMat = new THREE.MeshStandardMaterial({ color: roofColors[i%roofColors.length], roughness:0.85 });
     const w = 1.6 + Math.random()*0.4, hgt = 1.4 + Math.random()*0.5, d = 1.6;
     const body = new THREE.Mesh(new THREE.BoxGeometry(w,hgt,d), wallMat);
@@ -396,7 +475,7 @@ function buildPlayerMeshes(){
     g.add(body, head);
     g.position.set(px,0,pz);
     g.lookAt(0,0.6,0);
-    const lantern = new THREE.PointLight(0xffcf8a, 0.6, 2.6, 2);
+    const lantern = new THREE.PointLight(0xffcf8a, 1.1, 3.6, 2);
     lantern.position.set(0,1,0.3);
     g.add(lantern);
     scene.add(g);
@@ -435,9 +514,9 @@ function setDayNight(target, duration=2.5){
 function applyDayNight(){
   scene.background = skyColor.night.clone().lerp(skyColor.day, dayNightT);
   scene.fog.color = scene.background;
-  ambientLight.intensity = 0.5 + dayNightT*0.8;
-  moonLight.intensity = 0.5*(1-dayNightT);
-  sunLight.intensity = 0.9*dayNightT;
+  ambientLight.intensity = 1.1 + dayNightT*0.9;
+  moonLight.intensity = 1.1*(1-dayNightT) + 0.3;
+  sunLight.intensity = 1.1*dayNightT;
   document.getElementById('dial-icon').textContent = dayNightT > 0.5 ? '☀️' : '🌙';
   document.getElementById('dial-icon').style.background = dayNightT>0.5 ? 'rgba(255,220,150,0.15)' : 'rgba(120,150,220,0.1)';
 }
@@ -563,6 +642,7 @@ function startTimer(seconds, onDone){
 /* ---------- NIGHT PHASE ---------- */
 function startNight(){
   phase = 'NIGHT';
+  resolveNight._done = false;
   setDayNight(0);
   setPhaseUI('GECE');
   nightAction = { mafiaTarget:null, doctorTarget:null, sheriffTarget:null };
@@ -570,6 +650,7 @@ function startNight(){
   showBanner('Gece çöktü. Köy uykuya daldı...');
   const me = getPlayer(humanId);
   const panel = document.getElementById('action-panel');
+  panel.classList.remove('hidden');
   const targets = document.getElementById('action-targets');
   const title = document.getElementById('action-title');
   const confirm = document.getElementById('confirm-btn');
@@ -617,7 +698,7 @@ function startNight(){
     resolveNight();
   };
 
-  startTimer(20, ()=>{ if(confirm.style.display!=='none' && !confirm.disabled===false) {} resolveNight(); });
+  startTimer(20, resolveNight);
 }
 
 function resolveNight(){
